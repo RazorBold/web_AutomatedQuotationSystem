@@ -1,0 +1,6 @@
+{
+  "name": "Agusta Automated Quotation System",
+  "description": "Portal otomatisasi surat penawaran harga Agusta dari tim Sales ke Sales Support dengan Smart Search katalog, kontrol COGS/HPP sensitif, approval dashboard, PDF engine, dan integrasi WhatsApp Business API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
