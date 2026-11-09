@@ -1,77 +1,45 @@
 import React from 'react';
 
 interface AgustaLogoProps {
-  variant?: 'light' | 'dark' | 'white';
-  className?: string;
   size?: 'sm' | 'md' | 'lg';
+  className?: string;
+  /** Hide the "Business & Office Equipment" line (e.g. compact headers). */
+  compact?: boolean;
 }
 
-export const AgustaLogo: React.FC<AgustaLogoProps> = ({
-  variant = 'light',
-  className = '',
-  size = 'md',
-}) => {
-  const isWhite = variant === 'white';
-  const subtitleColor = isWhite ? 'text-slate-300' : 'text-slate-700';
-  const textColor = isWhite ? 'text-white' : 'text-red-600';
-
-  const sizeStyles = {
-    sm: { icon: 'w-7 h-7', title: 'text-base', sub: 'text-[9px]' },
-    md: { icon: 'w-9 h-9', title: 'text-xl', sub: 'text-[10px]' },
-    lg: { icon: 'w-12 h-12', title: 'text-2xl', sub: 'text-xs' },
+/**
+ * Wordmark approximating the public agusta.co.id lockup: red swirl ball,
+ * heavy oblique red wordmark, navy descriptor line.
+ */
+export function AgustaLogo({ size = 'md', className = '', compact = false }: AgustaLogoProps) {
+  const s = {
+    sm: { mark: 22, word: 'text-[17px]', sub: 'text-[7.5px]' },
+    md: { mark: 28, word: 'text-[22px]', sub: 'text-[9px]' },
+    lg: { mark: 40, word: 'text-[32px]', sub: 'text-[12px]' },
   }[size];
 
   return (
-    <div className={`flex items-center gap-3 select-none ${className}`}>
-      {/* Red Geometric / Swirl Emblem matching the Agusta Brand */}
-      <div className={`relative ${sizeStyles.icon} shrink-0`}>
-        <svg
-          viewBox="0 0 100 100"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-full drop-shadow-sm"
-        >
-          {/* Outer circle ring */}
-          <circle cx="50" cy="50" r="44" stroke="#DC2626" strokeWidth="5" />
-          {/* Dynamic turbine / gear petals */}
-          <path
-            d="M50 14C50 14 62 32 62 50C62 68 50 86 50 86C50 86 38 68 38 50C38 32 50 14 50 14Z"
-            fill="#DC2626"
-          />
-          <path
-            d="M14 50C14 50 32 62 50 62C68 62 86 50 86 50C86 50 68 38 50 38C32 38 14 50 14 50Z"
-            fill="#DC2626"
-          />
-          <circle cx="50" cy="50" r="16" fill="#DC2626" />
-          <circle cx="50" cy="50" r="8" fill={isWhite ? '#0F172A' : '#FFFFFF'} />
-          <path
-            d="M24 24L76 76"
-            stroke={isWhite ? '#0F172A' : '#FFFFFF'}
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <path
-            d="M76 24L24 76"
-            stroke={isWhite ? '#0F172A' : '#FFFFFF'}
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-        </svg>
-      </div>
-
-      <div className="flex flex-col leading-tight">
+    <span className={`inline-flex items-center gap-1.5 select-none ${className}`} aria-label="Agusta Business & Office Equipment">
+      <svg width={s.mark} height={s.mark} viewBox="0 0 40 40" aria-hidden className="shrink-0">
+        <circle cx="20" cy="20" r="18" fill="#D6202A" />
+        <path d="M6 15.5c8 1.5 17.5-1 27-9" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+        <path d="M3.5 23c11 1.5 23-2.5 33-13" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+        <path d="M8 31.5c9.5 0 19.5-4.5 28.5-14" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+        <path d="M17 2.5c-5 8-5.5 22 2.5 35" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+      </svg>
+      <span className="flex flex-col leading-none">
         <span
-          className={`font-black tracking-wider ${textColor} ${sizeStyles.title}`}
-          style={{ letterSpacing: '0.04em' }}
+          className={`${s.word} font-extrabold italic text-brand`}
+          style={{ letterSpacing: '-0.02em', transform: 'skewX(-6deg)' }}
         >
           AGUSTA
         </span>
-        <span
-          className={`font-semibold tracking-tight uppercase italic ${subtitleColor} ${sizeStyles.sub}`}
-        >
-          Business & Office Equipment
-        </span>
-      </div>
-    </div>
+        {!compact && (
+          <span className={`${s.sub} mt-[2px] font-bold italic text-navy`} style={{ letterSpacing: '0.01em' }}>
+            Business &amp; Office Equipment
+          </span>
+        )}
+      </span>
+    </span>
   );
-};
+}

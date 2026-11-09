@@ -1,0 +1,8 @@
+# Internal portal — kept out of search results with `noindex`
+# (X-Robots-Tag header in vercel.json + <meta name="robots"> in index.html).
+#
+# Crawling is intentionally NOT blocked here: a crawler that is disallowed never sees the
+# noindex instruction, and Google can then still list the bare URL if someone links to it.
+# There is nothing to crawl anyway — every page except the login screen requires sign-in.
+User-agent: *
+Allow: /

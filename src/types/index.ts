@@ -1,4 +1,5 @@
 export type UserRole = 'SALES' | 'SALES_SUPPORT' | 'MANAGEMENT';
+export type UserStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface UserProfile {
   id: string;
@@ -8,6 +9,11 @@ export interface UserProfile {
   avatar: string;
   phone: string;
   email: string;
+  status: UserStatus;
+  /** Local demo mode only. With Supabase, passwords live (hashed) in Supabase Auth and never reach the client. */
+  password?: string;
+  createdAt: string;
+  lastLoginAt?: string;
 }
 
 export type QuotationStatus = 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'PDF_SENT';
@@ -48,7 +54,10 @@ export interface QuotationItemData {
   discountPercent: number;
   subtotal: number;
   notes?: string;
+  specs?: string;
 }
+
+export type CustomerCategory = 'BUMN_GOV' | 'CORPORATE' | 'EDUCATION' | 'RETAIL';
 
 export interface CustomerInfo {
   companyName: string;
@@ -57,7 +66,14 @@ export interface CustomerInfo {
   email: string;
   address: string;
   city: string;
-  category: 'BUMN_GOV' | 'CORPORATE' | 'EDUCATION' | 'RETAIL';
+  category: CustomerCategory;
+}
+
+export interface QuotationEvent {
+  at: string;
+  by: string;
+  label: string;
+  note?: string;
 }
 
 export interface Quotation {
@@ -85,9 +101,39 @@ export interface Quotation {
   rejectionReason?: string;
   pdfGeneratedAt?: string;
   pdfDownloadUrl?: string;
-  whatsAppStatus?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ';
+  /** Storage path of the issued PDF (Supabase mode). */
+  pdfPath?: string;
+  whatsAppStatus?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
   whatsAppMessageLog?: string;
+  history?: QuotationEvent[];
 }
+
+export type NotificationType =
+  | 'QUOTATION_SUBMITTED'
+  | 'QUOTATION_RESUBMITTED'
+  | 'QUOTATION_APPROVED'
+  | 'QUOTATION_REJECTED'
+  | 'CUSTOM_REQUEST_SUBMITTED'
+  | 'CUSTOM_REQUEST_PRICED'
+  | 'CUSTOM_REQUEST_APPROVED'
+  | 'CUSTOM_REQUEST_REJECTED';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  quotationId?: string;
+  requestId?: string;
+  /** Display string (id-ID). */
+  createdAt: string;
+  /** ISO timestamp, for ordering and "x menit lalu". */
+  createdAtIso: string;
+  read: boolean;
+}
+
+export type CustomRequestStatus ='PENDING_PRICING' | 'PRICED' | 'APPROVED' | 'REJECTED';
 
 export interface CustomProductRequest {
   id: string;
@@ -100,8 +146,10 @@ export interface CustomProductRequest {
   specs: string;
   referenceUrlOrNotes: string;
   submittedAt: string;
-  status: 'PENDING_PRICING' | 'PRICED' | 'APPROVED' | 'REJECTED';
+  status: CustomRequestStatus;
   assignedCogs?: number;
   assignedSellingPrice?: number;
   supportNotes?: string;
+  /** Catalog product created when the price is approved, so the item can be quoted. */
+  productId?: string;
 }

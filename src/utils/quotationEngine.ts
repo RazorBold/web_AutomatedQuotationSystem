@@ -1,3 +1,5 @@
+import { rankProducts } from './smartSearch.js';
+
 /**
  * Business logic and math engine for Agusta Automated Quotation System
  * Pure functions decoupled from UI for deterministic calculations and unit testing.
@@ -33,6 +35,8 @@ export interface DiscountRule {
 
 export const DEFAULT_DISCOUNT_RULES: DiscountRule[] = [
   { minQty: 1, maxQty: 4, customerCategory: 'RETAIL', suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
+  { minQty: 1, maxQty: 4, customerCategory: 'CORPORATE', suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
+  { minQty: 1, maxQty: 9, customerCategory: 'EDUCATION', suggestedDiscount: 3, maxAllowedDiscount: 7, minMarginPercent: 18 },
   { minQty: 5, maxQty: 19, customerCategory: 'CORPORATE', suggestedDiscount: 5, maxAllowedDiscount: 10, minMarginPercent: 18 },
   { minQty: 20, maxQty: 49, customerCategory: 'CORPORATE', suggestedDiscount: 8, maxAllowedDiscount: 12, minMarginPercent: 15 },
   { minQty: 50, customerCategory: 'CORPORATE', suggestedDiscount: 10, maxAllowedDiscount: 15, minMarginPercent: 12 },
@@ -92,7 +96,11 @@ export function calculateQuotationTotals(
 /**
  * Determine suggested discount based on quantity and customer segment
  */
-export function getSuggestedDiscount(qty: number, category: CustomerCategory = 'CORPORATE'): {
+export function getSuggestedDiscount(
+  qty: number,
+  category: CustomerCategory = 'CORPORATE',
+  rules: DiscountRule[] = DEFAULT_DISCOUNT_RULES
+): {
   suggestedPercent: number;
   maxAllowedPercent: number;
   minMarginPercent: number;
@@ -101,21 +109,21 @@ export function getSuggestedDiscount(qty: number, category: CustomerCategory = '
     return { suggestedPercent: 0, maxAllowedPercent: 0, minMarginPercent: 20 };
   }
 
-  if (category === 'BUMN_GOV') {
-    return { suggestedPercent: 5, maxAllowedPercent: 12, minMarginPercent: 15 };
-  }
+  const inRange = (r: DiscountRule) => qty >= r.minQty && (r.maxQty === undefined || qty <= r.maxQty);
+  // Retail customers fall back to the corporate tiers when no retail rule matches.
+  const pick = (cat: CustomerCategory) =>
+    rules
+      .filter(r => r.customerCategory === cat && inRange(r))
+      .sort((a, b) => b.minQty - a.minQty)[0];
 
-  if (category === 'EDUCATION') {
-    return qty >= 10
-      ? { suggestedPercent: 7, maxAllowedPercent: 12, minMarginPercent: 15 }
-      : { suggestedPercent: 3, maxAllowedPercent: 7, minMarginPercent: 18 };
-  }
+  const rule = pick(category) ?? (category === 'RETAIL' ? pick('CORPORATE') : undefined);
+  if (!rule) return { suggestedPercent: 0, maxAllowedPercent: 5, minMarginPercent: 20 };
 
-  // Corporate / Standard
-  if (qty >= 50) return { suggestedPercent: 10, maxAllowedPercent: 15, minMarginPercent: 12 };
-  if (qty >= 20) return { suggestedPercent: 8, maxAllowedPercent: 12, minMarginPercent: 15 };
-  if (qty >= 5) return { suggestedPercent: 5, maxAllowedPercent: 10, minMarginPercent: 18 };
-  return { suggestedPercent: 0, maxAllowedPercent: 5, minMarginPercent: 20 };
+  return {
+    suggestedPercent: rule.suggestedDiscount,
+    maxAllowedPercent: rule.maxAllowedDiscount,
+    minMarginPercent: rule.minMarginPercent,
+  };
 }
 
 /**
@@ -174,61 +182,8 @@ export interface SearchableProduct {
 }
 
 export function smartProductSearch<T extends SearchableProduct>(products: T[], query: string): T[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return products;
-
-  // Synonyms map for office furniture & IT equipment in Indonesian
-  const synonymMap: Record<string, string[]> = {
-    ergonomis: ['filmore', 'vino', 'lumbar', 'headrest', 'kursi kantor', 'mesh'],
-    kursi: ['indachi', 'filmore', 'vino', 'chair', 'kursi kerja', 'kursi direktur', 'kursi kantor'],
-    komputer: ['aio', 'pc', 'all in one', 'lenovo', 'asus', 'acer', 'zyrex', 'thinkcentre'],
-    aio: ['all-in-one', 'thinkcentre', 'ideacentre', 'veriton', 'expertcenter', 'pc'],
-    meja: ['desk', 'table', 'resepsionis', 'sekolah', 'cradenza', 'meja kerja', 'rapat'],
-    lemari: ['filing', 'cabinet', 'arsip', 'locker', 'rak', 'wardrobe'],
-  };
-
-  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
-
-  // Expand query tokens with synonyms
-  const expandedTokens = new Set<string>(queryTokens);
-  for (const token of queryTokens) {
-    for (const [key, synonyms] of Object.entries(synonymMap)) {
-      if (token.includes(key) || key.includes(token)) {
-        synonyms.forEach(syn => expandedTokens.add(syn));
-      }
-    }
-  }
-
-  const scored = products.map(product => {
-    let score = 0;
-    const nameLower = product.name.toLowerCase();
-    const skuLower = product.sku.toLowerCase();
-    const catLower = product.category.toLowerCase();
-    const descLower = (product.description || '').toLowerCase();
-    const specsLower = (product.specs || '').toLowerCase();
-
-    // Exact full query match
-    if (nameLower.includes(normalizedQuery)) score += 50;
-    if (skuLower.includes(normalizedQuery)) score += 60;
-    if (catLower.includes(normalizedQuery)) score += 30;
-
-    // Token scoring
-    for (const token of expandedTokens) {
-      if (nameLower.includes(token)) score += 15;
-      if (skuLower.includes(token)) score += 20;
-      if (catLower.includes(token)) score += 10;
-      if (descLower.includes(token)) score += 5;
-      if (specsLower.includes(token)) score += 5;
-      if (product.keywords?.some(k => k.toLowerCase().includes(token))) score += 12;
-    }
-
-    return { product, score };
-  });
-
-  return scored
-    .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map(item => item.product);
+  // Delegates to the request-aware engine: synonyms, typo tolerance, quantity/budget/spec parsing.
+  return rankProducts(products, query);
 }
 
 /**
