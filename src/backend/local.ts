@@ -187,6 +187,15 @@ export function createLocalBackend(): Backend {
 
     ...agustaApi(),
 
+    async setCustomRequestSupplier(actor, id, supplier) {
+      require(actor, 'custom-request:price');
+      state = {
+        ...state,
+        customRequests: state.customRequests.map(r => (r.id === id ? { ...r, supplier: supplier?.name ? supplier : undefined } : r)),
+      };
+      save();
+    },
+
     async importAgustaProducts(actor, items) {
       require(actor, 'cogs:edit');
       let inserted = 0;

@@ -18,6 +18,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
    1. `supabase/migrations/20261109000000_init.sql`: tabel, aturan akses (RLS), fungsi persetujuan, bucket PDF `quotations`, realtime.
    2. `supabase/migrations/20261110000000_notifications.sql`: notifikasi di portal (lonceng), dibuat otomatis oleh trigger.
    3. `supabase/migrations/20261111000000_agusta_catalog.sql`: katalog diselaraskan dengan agusta.co.id (impor produk, foto & link di request, produk tanpa harga tidak bisa dipakai di penawaran).
+   4. `supabase/migrations/20261112000000_supplier_research.sql`: acuan supplier dari riset harga pasar (hanya terlihat oleh Sales Support & Management).
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`
@@ -149,7 +150,23 @@ Portal membaca data produk dari website Agusta (agusta.co.id). Datanya diambil d
 - Harga, HPP, stok, dan nama produk yang sudah ada di portal tidak pernah ditimpa oleh sinkronisasi.
 - Foto ditampilkan langsung dari agusta.co.id. Untuk PDF, foto diambil lewat `/api/agusta-image` dan di-cache di CDN Vercel. Server foto agusta.co.id cukup lambat (foto PNG 0,5–0,7 MB), jadi foto pertama kali bisa butuh beberapa detik untuk tampil. Mengecilkan ukuran foto di website Agusta (misalnya WebP ≤ 150 KB) akan sangat mempercepat portal maupun website.
 
-## 9. Mesin pencari (Google)
+## 9. Riset harga pasar & supplier untuk barang custom
+
+Saat Sales Support membuka request barang custom, panel **Riset harga pasar** mencari barang serupa di toko online lewat Google Shopping (mencakup Tokopedia, Shopee, Bhinneka, Blibli, dan lainnya). Panel menampilkan foto, nama barang, **harga, nama toko, dan link**, plus harga termurah, median, dan termahal. Harga yang tidak wajar (aksesori, harga grosir) otomatis disaring.
+
+- **Pakai sebagai acuan** mencatat toko itu sebagai supplier dan mengisi HPP dengan harganya. Bila harga jual masih kosong atau di bawah HPP, harga jual disarankan pada margin 20%. Setelah disetujui, barang masuk katalog dan bisa dipakai Sales di penawaran.
+- Data supplier dan harga belinya **tidak terlihat oleh Sales**, sama seperti HPP.
+- Supplier juga bisa diisi manual (nama toko, harga, link).
+
+**Kenapa lewat Serper.dev, bukan mengambil langsung dari Google:** Google memblokir dan melarang pengambilan otomatis dari halaman hasil pencariannya. Serper.dev adalah layanan API yang menyediakan hasil Google Shopping secara resmi.
+
+**Mengaktifkan:**
+1. Daftar di <https://serper.dev>. Kuota gratis 2.500 pencarian, setelahnya berbayar per pencarian.
+2. Salin API key ke env `SERPER_API_KEY` (di `.env.local` dan Vercel), lalu deploy ulang.
+
+Tanpa API key, panel berjalan dalam **mode manual**: tombol membuka pencarian di Google Shopping, Tokopedia, Shopee, Bhinneka, dan Blibli di tab baru, lalu supplier dicatat manual. Hasil pencarian di-cache 30 menit supaya kuota tidak cepat habis.
+
+## 10. Mesin pencari (Google)
 Portal ini sengaja **tidak diindeks**. Ada tiga lapisan: header `X-Robots-Tag: noindex` di semua respons (`vercel.json`), `<meta name="robots" content="noindex">` di `index.html`, dan deskripsi halaman yang netral. `robots.txt` sengaja tidak memblokir crawler. Kalau crawler diblokir, Google tidak pernah membaca perintah `noindex`, dan URL-nya justru bisa tetap muncul di hasil pencarian.
 
 Kalau domain portal sudah sempat terindeks, ajukan penghapusan lewat Google Search Console → **Removals**.

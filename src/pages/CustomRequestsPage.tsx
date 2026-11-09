@@ -8,6 +8,11 @@ import { Badge, Button, Drawer, EmptyState, Field, Input, PageHeader, Panel, Pro
 import { MarginValue } from '../components/QuotationTable';
 import { formatRupiah } from '../utils/quotationEngine';
 import { suggestProducts } from '../utils/smartSearch';
+import { priceForMargin, type SupplierRef } from '../utils/marketResearch';
+import { MarketResearch } from '../components/MarketResearch';
+
+/** Margin used when a market price is taken as HPP and the selling price is still empty. */
+const MIN_SUGGESTED_MARGIN = 20;
 
 export const CATEGORIES = ['Kursi Kantor', 'Kursi Tunggu', 'Meja Kerja', 'Meja Kerja Partisi', 'Meja Rapat', 'Lemari Arsip', 'AIO', 'Laptop', 'Proyektor', 'Lainnya'];
 const num = (v: string) => Number(v.replace(/[^\d]/g, '')) || 0;
@@ -187,24 +192,34 @@ export function NewRequestDrawer({
 }
 
 function PricingDrawer({ request, onClose }: { request: CustomProductRequest | null; onClose: () => void }) {
-  const { priceCustomRequest, notify } = useStore();
+  const { priceCustomRequest, setCustomRequestSupplier, notify } = useStore();
   const [cogs, setCogs] = useState(0);
   const [price, setPrice] = useState(0);
   const [notes, setNotes] = useState('');
   const [lastId, setLastId] = useState<string | null>(null);
   const [saving, setSaving] = useState<CustomRequestStatus | null>(null);
+  const [supplier, setSupplier] = useState<SupplierRef | null>(null);
   if (request && request.id !== lastId) {
     setLastId(request.id);
     setCogs(request.assignedCogs ?? 0);
     setPrice(request.assignedSellingPrice ?? request.targetPricePerUnit);
     setNotes(request.supportNotes ?? '');
+    setSupplier(request.supplier ?? null);
   }
   if (!request) return null;
   const margin = price > 0 ? ((price - cogs) / price) * 100 : 0;
+  const supplierChanged = JSON.stringify(supplier ?? null) !== JSON.stringify(request.supplier ?? null);
+
+  /** A chosen market price becomes the HPP; the selling price is suggested at a 20% margin if it doesn't cover it. */
+  const useAsCost = (cost: number) => {
+    setCogs(cost);
+    if (!price || price <= cost) setPrice(priceForMargin(cost, MIN_SUGGESTED_MARGIN));
+  };
 
   const save = (status: CustomRequestStatus) => {
     setSaving(status);
-    priceCustomRequest(request.id, { assignedCogs: cogs, assignedSellingPrice: price, supportNotes: notes, status })
+    (supplierChanged ? setCustomRequestSupplier(request.id, supplier) : Promise.resolve())
+      .then(() => priceCustomRequest(request.id, { assignedCogs: cogs, assignedSellingPrice: price, supportNotes: notes, status }))
       .then(() => {
         notify(
           status === 'REJECTED'
@@ -268,6 +283,14 @@ function PricingDrawer({ request, onClose }: { request: CustomProductRequest | n
           </>
         )}
       </dl>
+
+      <MarketResearch
+        key={request.id}
+        defaultQuery={request.productName}
+        supplier={supplier}
+        onSupplierChange={setSupplier}
+        onUseAsCost={useAsCost}
+      />
 
       <div className="mt-6 rounded-xl border border-line p-4">
         <p className="text-sm font-semibold text-ink">Perhitungan harga</p>

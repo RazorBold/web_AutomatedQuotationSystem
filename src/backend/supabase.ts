@@ -151,7 +151,10 @@ function mapRequest(r: Row): CustomProductRequest {
     referenceUrlOrNotes: r.reference_url_or_notes ?? '',
     submittedAt: fmt(r.submitted_at),
     status: r.status,
-    assignedCogs: costs ? n(costs.assigned_cogs) : undefined,
+    assignedCogs: costs?.assigned_cogs != null ? n(costs.assigned_cogs) : undefined,
+    supplier: costs?.supplier_name
+      ? { name: costs.supplier_name, url: costs.supplier_url ?? undefined, price: n(costs.supplier_price) }
+      : undefined,
     assignedSellingPrice: r.assigned_selling_price ?? undefined,
     supportNotes: r.support_notes ?? undefined,
     productId: r.product_id ?? undefined,
@@ -255,6 +258,17 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
 
     ...agustaApi(async () => (await sb.auth.getSession()).data.session?.access_token ?? null),
 
+    async setCustomRequestSupplier(_actor, id, supplier) {
+      check(
+        await sb.rpc('set_custom_request_supplier', {
+          p_id: id,
+          p_name: supplier?.name ?? null,
+          p_url: supplier?.url ?? null,
+          p_price: supplier?.price ?? null,
+        })
+      );
+    },
+
     async importAgustaProducts(_actor, items) {
       const { data } = check(await sb.rpc('import_agusta_products', { p_items: items }));
       return data as { inserted: number; updated: number };
@@ -269,7 +283,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
         sb.from('profiles').select('*').order('created_at'),
         sb.from('products').select('*, product_costs(cogs)').order('created_at'),
         sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs))').order('created_at', { ascending: false }),
-        sb.from('custom_requests').select('*, custom_request_costs(assigned_cogs)').order('submitted_at', { ascending: false }),
+        sb.from('custom_requests').select('*, custom_request_costs(assigned_cogs, supplier_name, supplier_url, supplier_price)').order('submitted_at', { ascending: false }),
         sb.from('discount_rules').select('*').order('position'),
         sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
       ]);

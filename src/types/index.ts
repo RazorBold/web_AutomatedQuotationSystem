@@ -160,4 +160,6 @@ export interface CustomProductRequest {
   imageUrl?: string;
   /** Where the item was found (agusta.co.id product page). */
   sourceUrl?: string;
+  /** Supplier chosen during market research (Sales Support / Management only — like HPP). */
+  supplier?: { name: string; url?: string; price: number };
 }

@@ -3,6 +3,7 @@ import type { AppNotification, CustomProductRequest, Product, Quotation, Quotati
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
+import type { MarketSearchResult, SupplierRef } from '../utils/marketResearch';
 import { buildQuotationPdf, getDirector } from '../utils/quotationPdf';
 import { can } from '../auth/permissions';
 import {
@@ -63,6 +64,9 @@ interface Store {
 
   /** Products on agusta.co.id that match a request. */
   searchAgusta: (query: string) => Promise<AgustaProduct[]>;
+  /** Comparable offers on the web (price, store, link) for a custom request. */
+  searchMarket: (query: string) => Promise<MarketSearchResult>;
+  setCustomRequestSupplier: (id: string, supplier: SupplierRef | null) => Promise<void>;
   /** Imports the whole agusta.co.id catalog, one page at a time. */
   syncAgustaCatalog: (onProgress: (p: SyncProgress) => void, signal: AbortSignal) => Promise<SyncProgress>;
   toasts: Toast[];
@@ -284,6 +288,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const searchAgusta: Store['searchAgusta'] = q => backend.searchAgusta(q);
+  const searchMarket: Store['searchMarket'] = q => backend.searchMarket(q);
+  const setCustomRequestSupplier: Store['setCustomRequestSupplier'] = async (id, supplier) => {
+    await backend.setCustomRequestSupplier(actor(), id, supplier);
+    await refresh();
+  };
 
   const syncAgustaCatalog: Store['syncAgustaCatalog'] = async (onProgress, signal) => {
     const progress: SyncProgress = { page: 0, lastPage: 1, total: 0, inserted: 0, updated: 0 };
@@ -322,6 +331,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     unreadCount: snap.notifications.filter(n => !n.read).length,
     markNotificationsRead,
     searchAgusta,
+    searchMarket,
+    setCustomRequestSupplier,
     syncAgustaCatalog,
     toasts,
     login,

@@ -2,6 +2,7 @@ import type { AppNotification, CustomProductRequest, CustomerInfo, Product, Quot
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
+import type { MarketSearchResult, SupplierRef } from '../utils/marketResearch';
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -70,6 +71,11 @@ export interface Backend {
   fetchAgustaPage(page: number): Promise<{ products: AgustaProduct[]; page: number; lastPage: number; total: number }>;
   /** Upserts website products into the catalog (new ones have no price yet). */
   importAgustaProducts(actor: UserProfile, items: AgustaProduct[]): Promise<{ inserted: number; updated: number }>;
+
+  /** Comparable offers on the web for a custom request (Sales Support). */
+  searchMarket(query: string): Promise<MarketSearchResult>;
+  /** Saves (or clears, with null) the supplier reference of a custom request. */
+  setCustomRequestSupplier(actor: UserProfile, id: string, supplier: SupplierRef | null): Promise<void>;
 
   /** Marks the given notifications (or all, when omitted) as read. */
   markNotificationsRead(actor: UserProfile, ids?: string[]): Promise<void>;
