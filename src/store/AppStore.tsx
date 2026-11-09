@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import type { AppNotification, CustomProductRequest, Product, Quotation, QuotationItemData, UserProfile } from '../types';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
+import type { AgustaProduct } from '../utils/agustaCatalog';
 import { buildQuotationPdf, getDirector } from '../utils/quotationPdf';
 import { can } from '../auth/permissions';
 import {
@@ -32,6 +33,14 @@ export interface Toast {
   tone: 'success' | 'info' | 'error';
 }
 
+export interface SyncProgress {
+  page: number;
+  lastPage: number;
+  total: number;
+  inserted: number;
+  updated: number;
+}
+
 export interface ApproveOutcome {
   quotation: Quotation;
   /** PDF issuing + WhatsApp happen automatically after approval; this reports how that went. */
@@ -51,6 +60,11 @@ interface Store {
   notifications: AppNotification[];
   unreadCount: number;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
+
+  /** Products on agusta.co.id that match a request. */
+  searchAgusta: (query: string) => Promise<AgustaProduct[]>;
+  /** Imports the whole agusta.co.id catalog, one page at a time. */
+  syncAgustaCatalog: (onProgress: (p: SyncProgress) => void, signal: AbortSignal) => Promise<SyncProgress>;
   toasts: Toast[];
 
   login: (email: string, password: string) => Promise<Result>;
@@ -269,6 +283,28 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     await refresh().catch(() => undefined);
   };
 
+  const searchAgusta: Store['searchAgusta'] = q => backend.searchAgusta(q);
+
+  const syncAgustaCatalog: Store['syncAgustaCatalog'] = async (onProgress, signal) => {
+    const progress: SyncProgress = { page: 0, lastPage: 1, total: 0, inserted: 0, updated: 0 };
+    try {
+      for (let page = 1; page <= progress.lastPage; page++) {
+        if (signal.aborted) break;
+        const res = await backend.fetchAgustaPage(page);
+        const r = await backend.importAgustaProducts(actor(), res.products);
+        Object.assign(progress, { page, lastPage: res.lastPage, total: res.total });
+        progress.inserted += r.inserted;
+        progress.updated += r.updated;
+        onProgress({ ...progress });
+        // Be gentle with agusta.co.id.
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    } finally {
+      await refresh().catch(() => undefined);
+    }
+    return progress;
+  };
+
   const resetDemoData = backend.resetDemoData
     ? async () => {
         await backend.resetDemoData!();
@@ -285,6 +321,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     ...snap,
     unreadCount: snap.notifications.filter(n => !n.read).length,
     markNotificationsRead,
+    searchAgusta,
+    syncAgustaCatalog,
     toasts,
     login,
     logout,

@@ -8,6 +8,7 @@ import { can, type Permission } from '../auth/permissions';
 import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, generateQuotationNumber } from '../utils/quotationEngine';
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
 import type { Backend, Snapshot } from './types';
+import { agustaApi, productFromAgusta, sameProduct } from './agustaApi';
 
 const STORAGE_KEY = 'agusta-qs:v3';
 
@@ -184,6 +185,41 @@ export function createLocalBackend(): Backend {
       return { ...snap, notifications: notifications.filter(n => n.userId === sessionUserId) };
     },
 
+    ...agustaApi(),
+
+    async importAgustaProducts(actor, items) {
+      require(actor, 'cogs:edit');
+      let inserted = 0;
+      let updated = 0;
+      const products = [...state.products];
+      const skus = new Set(products.map(p => p.sku.toUpperCase()));
+      for (const a of items) {
+        const i = products.findIndex(p => sameProduct(p, a));
+        const fresh = productFromAgusta(a);
+        if (i >= 0) {
+          const cur = products[i]!;
+          // Keep the portal's prices, stock and naming; refresh what the website owns.
+          products[i] = {
+            ...cur,
+            category: cur.sourceId ? fresh.category : cur.category,
+            image: cur.image || fresh.image,
+            specs: fresh.specs || cur.specs,
+            sourceId: a.sourceId,
+            sourceUrl: a.url,
+          };
+          updated++;
+        } else {
+          if (skus.has(fresh.sku.toUpperCase())) fresh.sku = `${fresh.sku}-${a.sourceId}`;
+          skus.add(fresh.sku.toUpperCase());
+          products.push(fresh);
+          inserted++;
+        }
+      }
+      state = { ...state, products };
+      save();
+      return { inserted, updated };
+    },
+
     async markNotificationsRead(actor, ids) {
       state = {
         ...state,
@@ -205,6 +241,7 @@ export function createLocalBackend(): Backend {
       const items: QuotationItemData[] = input.items.map((it, idx) => {
         const p = state.products.find(x => x.id === it.productId);
         if (!p) throw new Error('Produk tidak ditemukan di katalog.');
+        if (p.basePrice <= 0) throw new Error(`Harga ${p.name} belum diisi Sales Support. Ajukan "Minta harga" terlebih dahulu.`);
         return {
           id: `item-${Date.now()}-${idx}`,
           productId: p.id,
@@ -363,12 +400,13 @@ export function createLocalBackend(): Backend {
           brand: 'Custom',
           basePrice: patch.assignedSellingPrice,
           cogs: patch.assignedCogs,
-          image: '',
+          image: req.imageUrl ?? '',
           stock: req.estimatedQty,
           unit: 'Unit',
           specs: req.specs,
           description: patch.supportNotes || 'Barang custom, dibuat sesuai pesanan.',
           isCustom: true,
+          sourceUrl: req.sourceUrl,
           keywords: ['custom', ...req.productName.toLowerCase().split(/\s+/)],
         };
         products = products.some(p => p.id === productId) ? products.map(p => (p.id === productId ? product : p)) : [...products, product];

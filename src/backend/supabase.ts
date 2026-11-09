@@ -17,6 +17,7 @@ import type {
 import type { CustomerCategory, DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { Backend, Result } from './types';
+import { agustaApi } from './agustaApi';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -76,6 +77,8 @@ function mapProduct(r: Row): Product {
     isBestSeller: !!r.is_best_seller,
     eKatalogLkpp: !!r.e_katalog_lkpp,
     keywords: r.keywords ?? [],
+    sourceId: r.source_id ?? undefined,
+    sourceUrl: r.source_url ?? undefined,
   };
 }
 
@@ -152,6 +155,8 @@ function mapRequest(r: Row): CustomProductRequest {
     assignedSellingPrice: r.assigned_selling_price ?? undefined,
     supportNotes: r.support_notes ?? undefined,
     productId: r.product_id ?? undefined,
+    imageUrl: r.image_url ?? undefined,
+    sourceUrl: r.source_url ?? undefined,
   };
 }
 
@@ -248,6 +253,13 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       await sb.auth.signOut();
     },
 
+    ...agustaApi(async () => (await sb.auth.getSession()).data.session?.access_token ?? null),
+
+    async importAgustaProducts(_actor, items) {
+      const { data } = check(await sb.rpc('import_agusta_products', { p_items: items }));
+      return data as { inserted: number; updated: number };
+    },
+
     async markNotificationsRead(_actor, ids) {
       check(await sb.rpc('mark_notifications_read', { p_ids: ids ?? null }));
     },
@@ -333,6 +345,8 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
           p_target_price: req.targetPricePerUnit,
           p_specs: req.specs,
           p_reference: req.referenceUrlOrNotes,
+          p_image_url: req.imageUrl ?? null,
+          p_source_url: req.sourceUrl ?? null,
         })
       );
     },

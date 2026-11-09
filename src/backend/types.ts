@@ -1,6 +1,7 @@
 import type { AppNotification, CustomProductRequest, CustomerInfo, Product, Quotation, QuotationItemData, UserProfile } from '../types';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
+import type { AgustaProduct } from '../utils/agustaCatalog';
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -22,7 +23,7 @@ export interface NewQuotationInput {
 
 export type NewCustomRequestInput = Pick<
   CustomProductRequest,
-  'productName' | 'category' | 'estimatedQty' | 'targetPricePerUnit' | 'specs' | 'referenceUrlOrNotes'
+  'productName' | 'category' | 'estimatedQty' | 'targetPricePerUnit' | 'specs' | 'referenceUrlOrNotes' | 'imageUrl' | 'sourceUrl'
 >;
 
 export type CustomRequestPricing = Pick<CustomProductRequest, 'assignedCogs' | 'assignedSellingPrice' | 'supportNotes' | 'status'>;
@@ -62,6 +63,13 @@ export interface Backend {
 
   addUser(actor: UserProfile, input: NewUserInput): Promise<Result>;
   updateUser(actor: UserProfile, id: string, patch: UserPatch): Promise<Result>;
+
+  /** Products on agusta.co.id matching a sales request (via the server proxy). */
+  searchAgusta(query: string): Promise<AgustaProduct[]>;
+  /** One page (12 products) of the agusta.co.id catalog, for syncing. */
+  fetchAgustaPage(page: number): Promise<{ products: AgustaProduct[]; page: number; lastPage: number; total: number }>;
+  /** Upserts website products into the catalog (new ones have no price yet). */
+  importAgustaProducts(actor: UserProfile, items: AgustaProduct[]): Promise<{ inserted: number; updated: number }>;
 
   /** Marks the given notifications (or all, when omitted) as read. */
   markNotificationsRead(actor: UserProfile, ids?: string[]): Promise<void>;

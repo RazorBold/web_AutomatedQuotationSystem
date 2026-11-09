@@ -37,6 +37,10 @@ export interface Product {
   isBestSeller?: boolean;
   eKatalogLkpp?: boolean;
   keywords?: string[];
+  /** Product id on agusta.co.id when imported from the website. */
+  sourceId?: string;
+  /** Product page on agusta.co.id. */
+  sourceUrl?: string;
 }
 
 export interface QuotationItemData {
@@ -152,4 +156,8 @@ export interface CustomProductRequest {
   supportNotes?: string;
   /** Catalog product created when the price is approved, so the item can be quoted. */
   productId?: string;
+  /** Photo of the requested item (e.g. from agusta.co.id), used for the catalog product once approved. */
+  imageUrl?: string;
+  /** Where the item was found (agusta.co.id product page). */
+  sourceUrl?: string;
 }

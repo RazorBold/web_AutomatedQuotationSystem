@@ -64,6 +64,15 @@ export async function requireCaller(request: Request, roles?: Role[]): Promise<C
   return { id: profile.id, name: profile.name, role: profile.role, email: profile.email };
 }
 
+/** True when the Supabase backend is configured (otherwise the portal runs in local demo mode). */
+export const supabaseConfigured = () =>
+  Boolean((process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+/** Requires a signed-in user in Supabase mode; in demo mode (no Supabase) there are no server sessions to check. */
+export async function requireCallerIfConfigured(request: Request, roles?: Role[]): Promise<Caller | null> {
+  return supabaseConfigured() ? requireCaller(request, roles) : null;
+}
+
 export async function readJson<T>(request: Request): Promise<T> {
   try {
     return (await request.json()) as T;

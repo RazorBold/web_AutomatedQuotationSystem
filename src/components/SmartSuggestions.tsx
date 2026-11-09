@@ -22,17 +22,20 @@ export function SmartSuggestions({
   cartQty,
   onAdd,
   onCustomRequest,
+  onRequestPrice,
 }: {
   products: Product[];
   query: string;
   cartQty: (productId: string) => number;
   onAdd: (productId: string, qty: number) => void;
   onCustomRequest?: (name: string, qty: number) => void;
+  /** For products that exist but have no price yet. */
+  onRequestPrice?: (product: Product, qty: number) => void;
 }) {
   const results = useMemo(() => (query.trim().length >= 3 ? suggestProducts(products, query) : []), [products, query]);
   if (!isDetailedRequest(results.map(r => r.segment))) return null;
 
-  const addable = results.filter(r => r.suggestions[0] && !cartQty(r.suggestions[0].product.id));
+  const addable = results.filter(r => r.suggestions[0] && r.suggestions[0].product.basePrice > 0 && !cartQty(r.suggestions[0].product.id));
 
   return (
     <section aria-label="Saran dari permintaan" className="border-b border-line bg-link-soft/35 px-4 py-4">
@@ -80,7 +83,7 @@ export function SmartSuggestions({
                 </div>
               ) : (
                 <>
-                  <SuggestionRow s={best} inCart={cartQty(best.product.id)} onAdd={onAdd} />
+                  <SuggestionRow s={best} inCart={cartQty(best.product.id)} onAdd={onAdd} onRequestPrice={onRequestPrice} />
                   {alts.length > 0 && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line pt-2">
                       <span className="text-xs text-ink-3">Alternatif:</span>
@@ -107,7 +110,17 @@ export function SmartSuggestions({
   );
 }
 
-function SuggestionRow({ s, inCart, onAdd }: { s: ProductSuggestion<Product>; inCart: number; onAdd: (id: string, qty: number) => void }) {
+function SuggestionRow({
+  s,
+  inCart,
+  onAdd,
+  onRequestPrice,
+}: {
+  s: ProductSuggestion<Product>;
+  inCart: number;
+  onAdd: (id: string, qty: number) => void;
+  onRequestPrice?: (product: Product, qty: number) => void;
+}) {
   const p = s.product;
   return (
     <div className="mt-3 flex items-center gap-3">
@@ -121,8 +134,18 @@ function SuggestionRow({ s, inCart, onAdd }: { s: ProductSuggestion<Product>; in
         {s.warnings.length > 0 && <p className="truncate text-xs text-amber-700">{s.warnings.join(' · ')}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5">
-        <span className="text-[13px] font-semibold tabular-nums text-ink">{formatRupiah(p.basePrice)}</span>
-        {inCart ? (
+        {p.basePrice > 0 ? (
+          <span className="text-[13px] font-semibold tabular-nums text-ink">{formatRupiah(p.basePrice)}</span>
+        ) : (
+          <span className="text-xs text-ink-3">Harga belum ada</span>
+        )}
+        {p.basePrice <= 0 ? (
+          onRequestPrice && (
+            <Button size="sm" icon={<MessageSquarePlus className="size-3.5" />} onClick={() => onRequestPrice(p, s.qty)}>
+              Minta harga
+            </Button>
+          )
+        ) : inCart ? (
           <span className="inline-flex h-8 items-center gap-1 text-xs font-semibold text-emerald-700">
             <Check className="size-3.5" /> Di keranjang ({inCart})
           </span>

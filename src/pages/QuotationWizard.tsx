@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Check, ChevronLeft, Minus, PackageSearch, Plus, Search, ShoppingCart, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, MessageSquarePlus, Minus, PackageSearch, Plus, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { SmartSuggestions } from '../components/SmartSuggestions';
-import { CATEGORIES, NewRequestDrawer } from './CustomRequestsPage';
+import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
+import { AgustaWebResults } from '../components/AgustaWebResults';
+import { agustaImageUrl } from '../utils/agustaCatalog';
 import { parseSalesRequest } from '../utils/smartSearch';
 import type { CustomerCategory, CustomerInfo, Quotation } from '../types';
 import { Button, EmptyState, Field, Input, PageHeader, Panel, ProductImage, Textarea, cx } from '../components/ui';
@@ -77,7 +79,7 @@ export function QuotationWizard({
     setLines(prev => [...prev, { productId, qty, discountPercent: suggest(qty).suggestedPercent, notes: '' }]);
   };
 
-  const [customDraft, setCustomDraft] = useState<{ productName: string; estimatedQty: number; category?: string } | null>(null);
+  const [customDraft, setCustomDraft] = useState<CustomRequestDraft | null>(null);
   const openCustomRequest = (text: string, qty = 1) => {
     const [seg] = parseSalesRequest(text, CATEGORIES);
     setCustomDraft({
@@ -86,6 +88,19 @@ export function QuotationWizard({
       category: seg?.category && CATEGORIES.includes(seg.category) ? seg.category : undefined,
     });
   };
+  /** Quantity the rep typed in the request (first item), used when asking for a price. */
+  const requestedQty = parseSalesRequest(query, CATEGORIES)[0]?.qty ?? 1;
+  /** "Minta harga" for an item without a price (website product or unpriced catalog product). */
+  const requestPrice = (item: { name: string; category: string; specs?: string; image?: string; sourceUrl?: string }, qty = requestedQty) =>
+    setCustomDraft({
+      productName: item.name,
+      category: item.category,
+      estimatedQty: qty,
+      specs: item.specs,
+      imageUrl: item.image || undefined,
+      sourceUrl: item.sourceUrl,
+      referenceUrlOrNotes: item.sourceUrl ? `Produk di website Agusta: ${item.sourceUrl}` : '',
+    });
 
   const changeQty = (productId: string, qty: number) => {
     if (qty <= 0) return setLines(prev => prev.filter(l => l.productId !== productId));
@@ -345,6 +360,15 @@ export function QuotationWizard({
                 notify(`${byId(id).name} ditambahkan (${qty} ${byId(id).unit.toLowerCase()}).`, 'info');
               }}
               onCustomRequest={openCustomRequest}
+              onRequestPrice={(p, qty) => requestPrice(p, qty)}
+            />
+
+            <AgustaWebResults
+              query={query}
+              catalog={products}
+              onRequestPrice={a =>
+                requestPrice({ name: a.name, category: a.category, specs: a.specs, image: agustaImageUrl(a.imagePath), sourceUrl: a.url })
+              }
             />
 
             {results.length === 0 ? (
@@ -370,10 +394,21 @@ export function QuotationWizard({
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <span className="text-[13px] font-semibold tabular-nums text-ink">{formatRupiah(p.basePrice)}</span>
-                        <Button size="sm" variant={inCart ? 'ghost' : 'secondary'} icon={<Plus className="size-3.5" />} onClick={() => addProduct(p.id)}>
-                          {inCart ? `Tambah (${inCart.qty})` : 'Tambah'}
-                        </Button>
+                        {p.basePrice > 0 ? (
+                          <>
+                            <span className="text-[13px] font-semibold tabular-nums text-ink">{formatRupiah(p.basePrice)}</span>
+                            <Button size="sm" variant={inCart ? 'ghost' : 'secondary'} icon={<Plus className="size-3.5" />} onClick={() => addProduct(p.id)}>
+                              {inCart ? `Tambah (${inCart.qty})` : 'Tambah'}
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-xs text-ink-3">Harga belum ada</span>
+                            <Button size="sm" icon={<MessageSquarePlus className="size-3.5" />} onClick={() => requestPrice(p)}>
+                              Minta harga
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </li>
                   );

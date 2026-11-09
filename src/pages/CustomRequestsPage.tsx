@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FilePlus2, MessageSquarePlus, PackageOpen } from 'lucide-react';
+import { ExternalLink, FilePlus2, MessageSquarePlus, PackageOpen } from 'lucide-react';
 import type { Route } from '../App';
 import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { can } from '../auth/permissions';
@@ -19,7 +19,7 @@ function CatalogMatches({ text, onPick }: { text: string; onPick: (productId: st
     if (text.trim().length < 4) return [];
     return suggestProducts(products, text, 3)
       .flatMap(r => r.suggestions)
-      .filter(s => s.confidence !== 'low')
+      .filter(s => s.confidence !== 'low' && s.product.basePrice > 0)
       .slice(0, 3);
   }, [products, text]);
   if (!matches.length) return null;
@@ -47,6 +47,16 @@ function CatalogMatches({ text, onPick }: { text: string; onPick: (productId: st
   );
 }
 
+export interface CustomRequestDraft {
+  productName?: string;
+  estimatedQty?: number;
+  category?: string;
+  specs?: string;
+  referenceUrlOrNotes?: string;
+  imageUrl?: string;
+  sourceUrl?: string;
+}
+
 export function NewRequestDrawer({
   open,
   onClose,
@@ -55,14 +65,28 @@ export function NewRequestDrawer({
 }: {
   open: boolean;
   onClose: () => void;
-  /** Prefill, e.g. from the wizard when the catalog has no match. */
-  initial?: { productName?: string; estimatedQty?: number; category?: string };
+  /** Prefill, e.g. from the wizard when the catalog has no match or an item has no price yet. */
+  initial?: CustomRequestDraft;
   /** Called when the rep picks an existing catalog product instead. */
   onPickProduct?: (productId: string) => void;
 }) {
   const { submitCustomRequest, notify } = useStore();
-  const empty = { productName: '', category: CATEGORIES[0]!, estimatedQty: 1, targetPricePerUnit: 0, specs: '', referenceUrlOrNotes: '' };
-  const [form, setForm] = useState(() => ({ ...empty, ...initial }));
+  const empty = {
+    productName: '',
+    category: CATEGORIES[0]!,
+    estimatedQty: 1,
+    targetPricePerUnit: 0,
+    specs: '',
+    referenceUrlOrNotes: '',
+    imageUrl: undefined as string | undefined,
+    sourceUrl: undefined as string | undefined,
+  };
+  const [form, setForm] = useState(() => ({
+    ...empty,
+    ...Object.fromEntries(Object.entries(initial ?? {}).filter(([, v]) => v !== undefined && v !== '')),
+  }));
+  const fromWebsite = Boolean(form.sourceUrl);
+  const categoryOptions = CATEGORIES.includes(form.category) ? CATEGORIES : [form.category, ...CATEGORIES];
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -88,8 +112,12 @@ export function NewRequestDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      title="Ajukan barang custom"
-      description="Untuk barang yang belum ada di katalog. Sales Support akan menghitung HPP dan harga jualnya."
+      title={fromWebsite ? 'Minta harga ke Sales Support' : 'Ajukan barang custom'}
+      description={
+        fromWebsite
+          ? 'Produk ini ada di website Agusta tetapi belum punya harga di portal. Sales Support akan menghitung HPP dan harga jualnya.'
+          : 'Untuk barang yang belum ada di katalog. Sales Support akan menghitung HPP dan harga jualnya.'
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -102,6 +130,20 @@ export function NewRequestDrawer({
       }
     >
       <div className="flex flex-col gap-5">
+        {(form.imageUrl || form.sourceUrl) && (
+          <div className="flex items-center gap-3 rounded-xl border border-line p-3">
+            <ProductImage src={form.imageUrl ?? ''} alt="" hint={form.category} className="size-16 shrink-0 rounded-lg border border-line" />
+            <div className="min-w-0">
+              <p className="text-xs text-ink-3">Referensi produk</p>
+              <p className="line-clamp-2 text-[13px] font-semibold text-ink">{form.productName}</p>
+              {form.sourceUrl && (
+                <a href={form.sourceUrl} target="_blank" rel="noreferrer noopener" className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-link hover:text-link-strong">
+                  Lihat di agusta.co.id <ExternalLink className="size-3" aria-hidden />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
         <Field label="Nama barang" error={errors.productName}>
           {p => <Input {...p} value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} placeholder="Meja kerja partisi 4 staff + panel akustik" />}
         </Field>
@@ -109,7 +151,7 @@ export function NewRequestDrawer({
           <Field label="Kategori">
             {p => (
               <Select {...p} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                {CATEGORIES.map(c => (
+                {categoryOptions.map(c => (
                   <option key={c}>{c}</option>
                 ))}
               </Select>
@@ -197,6 +239,19 @@ function PricingDrawer({ request, onClose }: { request: CustomProductRequest | n
         </>
       }
     >
+      {(request.imageUrl || request.sourceUrl) && (
+        <div className="mb-5 flex items-center gap-3 rounded-xl border border-line p-3">
+          <ProductImage src={request.imageUrl ?? ''} alt="" hint={request.category} className="size-20 shrink-0 rounded-lg border border-line" />
+          <div className="min-w-0">
+            <p className="text-xs text-ink-3">{request.sourceUrl ? 'Produk dari website Agusta, belum ada harga' : 'Foto referensi'}</p>
+            {request.sourceUrl && (
+              <a href={request.sourceUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-flex items-center gap-1 text-[13px] font-medium text-link hover:text-link-strong">
+                Buka halaman produk <ExternalLink className="size-3.5" aria-hidden />
+              </a>
+            )}
+          </div>
+        </div>
+      )}
       <dl className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-2.5 text-[13px]">
         <dt className="text-ink-3">Kategori</dt>
         <dd>{request.category}</dd>

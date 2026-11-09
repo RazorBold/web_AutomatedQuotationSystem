@@ -73,7 +73,7 @@ const CATEGORY_LEXICON: Record<string, string[]> = {
   'Meja Rapat': ['meja rapat', 'meja meeting', 'conference table', 'meja konferensi', 'boardroom'],
   'Meja Kerja Partisi': ['meja partisi', 'meja kerja partisi', 'workstation', 'cubicle', 'kubikel', 'partisi'],
   'Meja Kerja': ['meja kerja', 'meja kantor', 'meja staf', 'meja staff', 'meja direktur', 'office desk'],
-  'Lemari Arsip': ['lemari arsip', 'filing cabinet', 'filling cabinet', 'lemari dokumen', 'filing', 'cabinet', 'arsip'],
+  'Lemari Arsip': ['lemari arsip', 'filing cabinet', 'filling cabinet', 'lemari dokumen', 'filing', 'arsip'],
   Printer: ['printer', 'pencetak'],
 };
 
@@ -144,12 +144,12 @@ function parseAmount(num: string, unit?: string): number {
 /** Detects the category named in `text` (longest phrase wins). */
 function detectCategory(text: string, catalogCategories: string[]): { category: string; phrase: string; inCatalog: boolean } | undefined {
   const known = new Map(catalogCategories.map(c => [c.toLowerCase(), c]));
-  const candidates: { category: string; phrase: string }[] = [];
+  // The catalog's own category names come first, so on an equally long match ("kursi direktur")
+  // a real catalog category wins over a lexicon alias pointing elsewhere.
+  const candidates: { category: string; phrase: string }[] = catalogCategories.map(c => ({ category: c, phrase: c.toLowerCase().trim() }));
   for (const [cat, phrases] of Object.entries(CATEGORY_LEXICON)) {
     for (const p of [cat.toLowerCase(), ...phrases]) candidates.push({ category: cat, phrase: p });
   }
-  // Catalog categories outside the lexicon still match by their own name.
-  for (const c of catalogCategories) if (!CATEGORY_LEXICON[c]) candidates.push({ category: c, phrase: c.toLowerCase() });
 
   let best: { category: string; phrase: string } | undefined;
   for (const c of candidates) {

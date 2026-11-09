@@ -4,6 +4,7 @@
  */
 import type { Quotation, UserProfile } from '../types';
 import { formatRupiah } from './quotationEngine';
+import { pdfSafeImageUrl } from './agustaCatalog';
 
 export const COMPANY = {
   address: 'Jl. Industri Raya No. 88, Kawasan Niaga Terpadu, Jakarta 14350',
@@ -27,7 +28,8 @@ interface PdfImage {
 }
 
 /** Loads a product photo and flattens it onto white as JPEG, so jsPDF can embed any source format. */
-function loadPdfImage(src: string): Promise<PdfImage | null> {
+function loadPdfImage(original: string): Promise<PdfImage | null> {
+  const src = pdfSafeImageUrl(original);
   if (!src) return Promise.resolve(null);
   return new Promise(resolve => {
     const img = new Image();
@@ -51,6 +53,8 @@ function loadPdfImage(src: string): Promise<PdfImage | null> {
       }
     };
     img.onerror = () => resolve(null);
+    // A slow photo must not block the document: give up on it after 25 s.
+    window.setTimeout(() => resolve(null), 25_000);
     img.src = src;
   });
 }

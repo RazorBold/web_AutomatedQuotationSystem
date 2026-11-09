@@ -17,6 +17,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
 2. Buka **SQL Editor → New query**, lalu jalankan dua file migrasi **berurutan** (tempel isinya, klik **Run**):
    1. `supabase/migrations/20261109000000_init.sql`: tabel, aturan akses (RLS), fungsi persetujuan, bucket PDF `quotations`, realtime.
    2. `supabase/migrations/20261110000000_notifications.sql`: notifikasi di portal (lonceng), dibuat otomatis oleh trigger.
+   3. `supabase/migrations/20261111000000_agusta_catalog.sql`: katalog diselaraskan dengan agusta.co.id (impor produk, foto & link di request, produk tanpa harga tidak bisa dipakai di penawaran).
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`
@@ -138,7 +139,17 @@ Pelaku aksi tidak menerima notifikasi atas aksinya sendiri. Notifikasi di portal
 
 Untuk memilih jenis yang dikirim ke WhatsApp, isi `WHATSAPP_NOTIFY_TYPES`, contoh `QUOTATION_SUBMITTED,QUOTATION_REJECTED`. Isi `none` untuk mematikan semuanya.
 
-## 8. Mesin pencari (Google)
+## 8. Katalog dari agusta.co.id
+
+Portal membaca data produk dari website Agusta (agusta.co.id). Datanya diambil dari JSON yang disisipkan di setiap halaman website, bukan dari tampilan HTML, sehingga lebih tahan terhadap perubahan desain.
+
+- **Saat Sales menyusun penawaran**, permintaan juga dicari di agusta.co.id (bagian *Dari agusta.co.id*). Produk yang ada di website tetapi belum ada harganya di portal bisa diajukan lewat **Minta harga**. Nama, foto, spesifikasi, dan link halaman produk terisi otomatis.
+- **Sales Support / Management** bisa menarik seluruh katalog website: *Katalog produk → Sinkronkan dari agusta.co.id* (±1.964 produk, 164 halaman, ±2–5 menit). Proses bisa dihentikan dan diulang kapan saja.
+- Website **tidak mencantumkan harga**. Produk baru masuk dengan tanda *Perlu harga* dan tidak bisa dipakai di penawaran sampai Sales Support mengisi harga jual & HPP (filter *Perlu harga* di Katalog). Aturan ini juga dijaga di database.
+- Harga, HPP, stok, dan nama produk yang sudah ada di portal tidak pernah ditimpa oleh sinkronisasi.
+- Foto ditampilkan langsung dari agusta.co.id. Untuk PDF, foto diambil lewat `/api/agusta-image` dan di-cache di CDN Vercel. Server foto agusta.co.id cukup lambat (foto PNG 0,5–0,7 MB), jadi foto pertama kali bisa butuh beberapa detik untuk tampil. Mengecilkan ukuran foto di website Agusta (misalnya WebP ≤ 150 KB) akan sangat mempercepat portal maupun website.
+
+## 9. Mesin pencari (Google)
 Portal ini sengaja **tidak diindeks**. Ada tiga lapisan: header `X-Robots-Tag: noindex` di semua respons (`vercel.json`), `<meta name="robots" content="noindex">` di `index.html`, dan deskripsi halaman yang netral. `robots.txt` sengaja tidak memblokir crawler. Kalau crawler diblokir, Google tidak pernah membaca perintah `noindex`, dan URL-nya justru bisa tetap muncul di hasil pencarian.
 
 Kalau domain portal sudah sempat terindeks, ajukan penghapusan lewat Google Search Console → **Removals**.
