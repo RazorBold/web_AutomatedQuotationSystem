@@ -3,7 +3,23 @@
 Portal internal Agusta untuk menyusun **surat penawaran harga**. Sales menyusun penawaran, Sales Support mereview dan menetapkan harga final, lalu PDF resmi terbit dan dikirim ke WhatsApp Sales.
 
 - **Alamat:** https://agusta-quotation-portal.vercel.app
-- **Status per 13 Nov 2026:** semua fitur di bawah sudah live. Database pusat (Supabase) dan WhatsApp Business **belum dihubungkan** (lihat [Status integrasi](#7-status-integrasi)).
+- **Status per 17 Nov 2026:** semua fitur di bawah sudah live, termasuk revisi Tahap 1 dari Agusta (lihat [Perubahan terbaru](#0-perubahan-terbaru) dan [revisi.md](revisi.md)). Database pusat (Supabase) dan WhatsApp Business **belum dihubungkan** (lihat [Status integrasi](#7-status-integrasi)).
+
+---
+
+## 0. Perubahan terbaru
+
+### 17 Nov 2026 — Revisi Tahap 1 (live)
+| Untuk | Perubahan |
+|---|---|
+| Sales | **Nomor telepon customer opsional.** Bila diisi, tercetak di surat & PDF. |
+| Sales | **Segmen customer opsional** (default *Tidak ditentukan*). Tanpa segmen tidak ada saran diskon otomatis; Sales mengisi diskon sendiri (maks. 5% tanpa persetujuan khusus). |
+| Sales & Sales Support | **Diskon per item dalam % atau Rp per unit** (tombol % / Rp). |
+| Sales & Sales Support | **Diskon tambahan (Rp)** untuk seluruh penawaran, dipotong sebelum PPN dan ikut dihitung di margin. |
+| Sales Support | **Tampilan di PDF:** centang *Tampilkan PPN* dan *Tampilkan diskon* per penawaran. Tanpa PPN → tertulis “Total (belum termasuk PPN)” dan pesan WhatsApp memakai total sebelum PPN. Tanpa diskon → harga satuan langsung harga setelah diskon. |
+| Management | Laporan margin punya kelompok **Tanpa segmen**. |
+
+Berikutnya (Tahap 2): pagu/anggaran di barang custom, aturan diskon per merek, eskalasi ke Management, biaya tambahan, revisi penawaran yang sudah jadi. Detail & status: [revisi.md](revisi.md).
 
 ---
 
@@ -41,10 +57,10 @@ flowchart TD
 ### Langkah demi langkah
 
 1. **Sales — Buat penawaran** (3 langkah)
-   1. *Customer*: nama instansi, kontak, alamat, segmen (Korporasi / BUMN-Pemerintah / Pendidikan / Retail).
-   2. *Produk*: ketik permintaan customer apa adanya, contoh: *"20 kursi ergonomis di bawah 2,5 juta dan 5 komputer core i7 16gb TKDN"*. Sistem menyarankan produk + jumlahnya (lihat [Smart search](#31-smart-search)). Diskon disarankan otomatis sesuai segmen & jumlah.
+   1. *Customer*: nama instansi, kontak (wajib); telepon, email, kota, alamat, segmen (Korporasi / BUMN-Pemerintah / Pendidikan / Retail) — opsional.
+   2. *Produk*: ketik permintaan customer apa adanya, contoh: *"20 kursi ergonomis di bawah 2,5 juta dan 5 komputer core i7 16gb TKDN"*. Sistem menyarankan produk + jumlahnya (lihat [Smart search](#31-smart-search)). Diskon per item diisi dalam **% atau Rp per unit** (disarankan otomatis bila segmen dipilih), plus **diskon tambahan (Rp)** untuk seluruh penawaran bila perlu.
    3. *Tinjau & ajukan*: pratinjau surat penawaran, catatan untuk Sales Support, lalu **Ajukan ke Sales Support**.
-2. **Sales Support — Review**: buka antrean review, ubah harga jual / diskon / HPP per item. Sistem memberi peringatan bila margin di bawah batas aman.
+2. **Sales Support — Review**: buka antrean review, ubah harga jual / diskon (% atau Rp) / HPP per item dan diskon tambahan. Sistem memberi peringatan bila margin di bawah batas aman. Atur **Tampilan di PDF**: tampilkan/sembunyikan PPN dan kolom diskon.
    - **Setujui & terbitkan PDF** → PDF resmi (kop Agusta, foto produk, spesifikasi, harga, PPN 11%, tanda tangan Sales + Direktur) terbit dan **otomatis dikirim ke WhatsApp Sales**.
    - **Kembalikan** → wajib menulis alasan; Sales menerima notifikasi "perlu revisi", merevisi, dan mengajukan ulang.
 3. **Sales** menerima PDF di WhatsApp dan meneruskannya ke customer.
@@ -81,7 +97,9 @@ Untuk barang yang tidak ada di katalog:
 Bisa juga diisi manual (tombol buka Google Shopping/Tokopedia/Shopee/Bhinneka/Blibli di tab baru).
 
 ### 3.4 PDF penawaran
-Surat resmi A4 ber-kop Agusta: nomor `QTN-YYMMDD-NNNN`, data customer, tabel item dengan **foto produk** dan spesifikasi, diskon, subtotal, PPN 11%, total, masa berlaku 14 hari, tanda tangan elektronik Sales & Direktur. HPP dan margin tidak pernah dicetak.
+Surat resmi A4 ber-kop Agusta: nomor `QTN-YYMMDD-NNNN`, data customer (telepon bila diisi), tabel item dengan **foto produk** dan spesifikasi, diskon, diskon tambahan, subtotal, PPN 11%, total, masa berlaku 14 hari, tanda tangan elektronik Sales & Direktur. HPP dan margin tidak pernah dicetak.
+
+Sales Support dapat **menyembunyikan PPN** (tertulis “Total (belum termasuk PPN)” dan syarat “Harga belum termasuk PPN”) dan/atau **menyembunyikan kolom diskon** (harga satuan langsung harga setelah diskon) per penawaran.
 
 ### 3.5 Notifikasi
 | Kejadian | Penerima | Di portal (lonceng) | WhatsApp |
@@ -148,7 +166,7 @@ Panduan setup teknis lengkap: [docs/backend-setup.md](docs/backend-setup.md).
 |---|---|---|
 | Riset harga pasar (Serper.dev) | ✅ **Aktif** | Kuota gratis 2.500 kredit (±1.250 pencarian). Paket Starter $50 = 50.000 kredit, berlaku 6 bulan |
 | Katalog agusta.co.id | ✅ **Aktif** | — |
-| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 4 file migrasi di `supabase/migrations/`, isi env di Vercel |
+| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 5 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel |
 | WhatsApp Business (Meta) | ⏳ Simulasi | Akun Meta Business terverifikasi, nomor pengirim, 2 template pesan disetujui Meta, token |
 | Sinkron katalog otomatis harian | ⏳ Belum dibuat | Bisa ditambahkan setelah Supabase aktif (saat ini lewat tombol) |
 

@@ -234,5 +234,6 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 | Tanggal | Revisi | Catatan |
 |---|---|---|
 | 17 Nov 2026 | R7, R11–R14 | **Masukan ke-2 dari Agusta:** alur eskalasi Management diperjelas (R7, Q7 sebagian terjawab); baru: pagu/anggaran (R11), aturan diskon per merek (R12), update mingguan Sales (R13), analisis success rate (R14). |
+| 17 Nov 2026 | R1–R4 | **Tahap 1 live di production** (commit `ed4d730`, Vercel *Ready*): https://agusta-quotation-portal.vercel.app |
 | 17 Nov 2026 | R1–R4 | **Tahap 1 selesai.** Memakai usulan default Q2–Q4 (mohon dikonfirmasi tim Agusta). Database: migrasi `20261117000000_quote_options.sql`. Diuji: unit test, database (PGlite), dan alur di browser. |
 | 17 Nov 2026 | — | Daftar revisi diterima dan dianalisis. R3 sudah sebagian ada (diskon % per item), R7 sebagian (konfirmasi margin rendah oleh Sales Support), R10 sebagian (riset via Google Shopping). |
