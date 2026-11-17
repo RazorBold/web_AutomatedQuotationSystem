@@ -241,6 +241,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 
 | Tanggal | Revisi | Catatan |
 |---|---|---|
+| 17 Nov 2026 | R13, R14, R8 | **Tahap 3 live di production** (commit `911ee85`, Vercel *Ready*). Pengingat mingguan aktif setelah Supabase dipasang dan `CRON_SECRET` diisi. |
 | 17 Nov 2026 | R13, R14, R8 | **Tahap 3 selesai.** Memakai usulan default Q8, Q13, Q14 (mohon dikonfirmasi). Database: migrasi `20261119000000_tahap3_followup.sql`; env baru `CRON_SECRET` untuk pengingat mingguan. Diuji: 33 unit test, database (PGlite, termasuk regresi 6 migrasi sebelumnya), dan alur di browser (Sales update → Management lihat laporan). |
 | 17 Nov 2026 | R5, R6, R7, R11, R12 | **Tahap 2 live di production** (commit `2341037`, Vercel *Ready*). Memakai usulan default Q5, Q6, sisa Q7, Q11; **angka aturan diskon per merek masih sementara (Q12)**. Database: migrasi `20261118000000_tahap2_workflow.sql`. Diuji: 28 unit test, database (PGlite, termasuk regresi 5 migrasi sebelumnya), dan alur di browser dengan 3 role. |
 | 17 Nov 2026 | R7, R11–R14 | **Masukan ke-2 dari Agusta:** alur eskalasi Management diperjelas (R7, Q7 sebagian terjawab); baru: pagu/anggaran (R11), aturan diskon per merek (R12), update mingguan Sales (R13), analisis success rate (R14). |
