@@ -46,10 +46,15 @@ export function documentView(q: Quotation): DocumentView {
     amount: it.subtotal,
   }));
 
+  const charges = q.charges ?? [];
+  const chargeSum = charges.reduce((s, c) => s + c.amount, 0);
+  const itemsTotal = q.subtotal - chargeSum + extra;
+
   const totals: DocumentTotalRow[] = [];
-  if (extra > 0) {
-    totals.push({ label: 'Total item', value: formatRupiah(q.subtotal + extra) });
-    totals.push({ label: 'Diskon tambahan', value: `- ${formatRupiah(extra)}` });
+  if (extra > 0 || charges.length > 0) {
+    totals.push({ label: 'Total item', value: formatRupiah(itemsTotal) });
+    if (extra > 0) totals.push({ label: 'Diskon tambahan', value: `- ${formatRupiah(extra)}` });
+    for (const c of charges) totals.push({ label: c.label, value: formatRupiah(c.amount) });
   }
   if (showTax) {
     totals.push({ label: 'Subtotal', value: formatRupiah(q.subtotal) });

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, FilePlus2, MessageSquarePlus, PackageOpen } from 'lucide-react';
+import { ExternalLink, FilePlus2, MessageSquarePlus, PackageOpen, ShieldCheck, ShieldQuestion, Undo2 } from 'lucide-react';
 import type { Route } from '../App';
 import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { can } from '../auth/permissions';
@@ -81,6 +81,7 @@ export function NewRequestDrawer({
     category: CATEGORIES[0]!,
     estimatedQty: 1,
     targetPricePerUnit: 0,
+    budgetTotal: undefined as number | undefined,
     specs: '',
     referenceUrlOrNotes: '',
     imageUrl: undefined as string | undefined,
@@ -166,9 +167,24 @@ export function NewRequestDrawer({
             {p => <Input {...p} inputMode="numeric" className="tabular-nums" value={form.estimatedQty} onChange={e => setForm({ ...form, estimatedQty: num(e.target.value) })} />}
           </Field>
         </div>
-        <Field label="Target harga per unit" optional hint="Harga yang diharapkan customer, jika ada.">
+        <Field
+          label="Pagu / anggaran"
+          optional
+          hint={
+            form.budgetTotal && form.estimatedQty > 0
+              ? `Total untuk ${form.estimatedQty} unit · ± ${formatRupiah(Math.round(form.budgetTotal / form.estimatedQty))} per unit.`
+              : 'Total anggaran customer untuk seluruh jumlah barang, jika ada.'
+          }
+        >
           {p => (
-            <Input {...p} inputMode="numeric" className="tabular-nums" value={form.targetPricePerUnit ? form.targetPricePerUnit.toLocaleString('id-ID') : ''} onChange={e => setForm({ ...form, targetPricePerUnit: num(e.target.value) })} placeholder="7.500.000" />
+            <Input
+              {...p}
+              inputMode="numeric"
+              className="tabular-nums"
+              value={form.budgetTotal ? form.budgetTotal.toLocaleString('id-ID') : ''}
+              onChange={e => setForm({ ...form, budgetTotal: num(e.target.value) || undefined })}
+              placeholder="75.000.000"
+            />
           )}
         </Field>
         <Field label="Spesifikasi" error={errors.specs}>
@@ -191,8 +207,13 @@ export function NewRequestDrawer({
   );
 }
 
+/** Pagu/anggaran for the whole quantity; older requests only had a target price per unit. */
+export const requestBudget = (r: CustomProductRequest) => r.budgetTotal ?? (r.targetPricePerUnit ? r.targetPricePerUnit * r.estimatedQty : undefined);
+
 function PricingDrawer({ request, onClose }: { request: CustomProductRequest | null; onClose: () => void }) {
-  const { priceCustomRequest, setCustomRequestSupplier, notify } = useStore();
+  const { priceCustomRequest, setCustomRequestSupplier, escalateCustomRequest, decideCustomRequestEscalation, notify, currentUser } = useStore();
+  const [escalating, setEscalating] = useState<'escalate' | 'return' | null>(null);
+  const [escNote, setEscNote] = useState('');
   const [cogs, setCogs] = useState(0);
   const [price, setPrice] = useState(0);
   const [notes, setNotes] = useState('');
@@ -202,13 +223,52 @@ function PricingDrawer({ request, onClose }: { request: CustomProductRequest | n
   if (request && request.id !== lastId) {
     setLastId(request.id);
     setCogs(request.assignedCogs ?? 0);
-    setPrice(request.assignedSellingPrice ?? request.targetPricePerUnit);
+    const budget = requestBudget(request);
+    setPrice(request.assignedSellingPrice ?? (budget ? Math.round(budget / Math.max(1, request.estimatedQty)) : 0));
+    setEscalating(null);
+    setEscNote('');
     setNotes(request.supportNotes ?? '');
     setSupplier(request.supplier ?? null);
   }
   if (!request) return null;
   const margin = price > 0 ? ((price - cogs) / price) * 100 : 0;
   const supplierChanged = JSON.stringify(supplier ?? null) !== JSON.stringify(request.supplier ?? null);
+  const budget = requestBudget(request);
+  const offerTotal = price * request.estimatedQty;
+  const isManagement = currentUser?.role === 'MANAGEMENT';
+  const waitingManagement = request.status === 'PENDING_MANAGEMENT';
+  /** Management decides an escalated request; Sales Support only watches it. */
+  const deciding = waitingManagement && isManagement;
+  const locked = waitingManagement && !isManagement;
+
+  const submitEscalation = () => {
+    if (escNote.trim().length < 5) return notify(escalating === 'escalate' ? 'Tulis alasan untuk Management.' : 'Tulis catatan untuk Sales Support.', 'error');
+    setSaving('PENDING_MANAGEMENT');
+    (supplierChanged ? setCustomRequestSupplier(request.id, supplier) : Promise.resolve())
+      .then(() =>
+        escalating === 'escalate'
+          ? escalateCustomRequest(request.id, escNote.trim(), cogs, price)
+          : decideCustomRequestEscalation(request.id, 'RETURNED', escNote.trim(), cogs, price)
+      )
+      .then(() => {
+        notify(escalating === 'escalate' ? 'Diteruskan ke Management.' : 'Dikembalikan ke Sales Support.', 'info');
+        onClose();
+      })
+      .catch(err => notify(errorMessage(err), 'error'))
+      .finally(() => setSaving(null));
+  };
+
+  const managementApprove = () => {
+    setSaving('PRICED');
+    (supplierChanged ? setCustomRequestSupplier(request.id, supplier) : Promise.resolve())
+      .then(() => decideCustomRequestEscalation(request.id, 'APPROVED', escNote.trim(), cogs, price))
+      .then(() => {
+        notify('Harga ditetapkan. Sales Support akan menyetujui dan memasukkannya ke katalog.');
+        onClose();
+      })
+      .catch(err => notify(errorMessage(err), 'error'))
+      .finally(() => setSaving(null));
+  };
 
   /** A chosen market price becomes the HPP; the selling price is suggested at a 20% margin if it doesn't cover it. */
   const useAsCost = (cost: number) => {
@@ -241,19 +301,57 @@ function PricingDrawer({ request, onClose }: { request: CustomProductRequest | n
       title={request.productName}
       description={`Dari ${request.salesName} · ${request.submittedAt}`}
       footer={
-        <>
-          <Button variant="danger" onClick={() => save('REJECTED')} loading={saving === 'REJECTED'} disabled={!!saving} className="mr-auto">
-            Tidak dapat diproses
-          </Button>
-          <Button onClick={() => save('PRICED')} loading={saving === 'PRICED'} disabled={!cogs || !price || !!saving}>
-            Simpan harga
-          </Button>
-          <Button variant="primary" onClick={() => save('APPROVED')} loading={saving === 'APPROVED'} disabled={!cogs || !price || !!saving}>
-            Setujui harga
-          </Button>
-        </>
+        deciding ? (
+          <>
+            <Button variant="danger" icon={<Undo2 className="size-4" />} onClick={() => setEscalating('return')} disabled={!!saving} className="mr-auto">
+              Kembalikan
+            </Button>
+            <Button variant="primary" icon={<ShieldCheck className="size-4" />} onClick={managementApprove} loading={saving === 'PRICED'} disabled={!cogs || !price || !!saving}>
+              Tetapkan harga
+            </Button>
+          </>
+        ) : locked ? (
+          <p className="mr-auto text-[13px] text-violet-800">Menunggu keputusan Management. Harga belum bisa diubah.</p>
+        ) : (
+          <>
+            <Button variant="danger" onClick={() => save('REJECTED')} loading={saving === 'REJECTED'} disabled={!!saving} className="mr-auto">
+              Tidak dapat diproses
+            </Button>
+            <Button onClick={() => save('PRICED')} loading={saving === 'PRICED'} disabled={!cogs || !price || !!saving}>
+              Simpan harga
+            </Button>
+            <Button variant="primary" onClick={() => save('APPROVED')} loading={saving === 'APPROVED'} disabled={!cogs || !price || !!saving}>
+              Setujui harga
+            </Button>
+          </>
+        )
       }
     >
+      {request.escalation && (
+        <div
+          className={cx(
+            'mb-5 rounded-xl border px-4 py-3 text-[13px]',
+            waitingManagement
+              ? 'border-violet-200 bg-violet-50 text-violet-900'
+              : request.escalation.decision === 'APPROVED'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : 'border-amber-200 bg-amber-50 text-amber-900'
+          )}
+        >
+          <p className="font-semibold">
+            {waitingManagement
+              ? 'Menunggu keputusan Management'
+              : request.escalation.decision === 'APPROVED'
+                ? `Harga ditetapkan Management · ${request.escalation.decidedBy}`
+                : `Dikembalikan Management · ${request.escalation.decidedBy}`}
+          </p>
+          <p className="mt-1 text-xs opacity-80">
+            Diteruskan oleh {request.escalation.by} · {request.escalation.at}
+          </p>
+          <p className="mt-1">“{request.escalation.note}”</p>
+          {request.escalation.decisionNote && <p className="mt-1.5 font-medium">Catatan Management: {request.escalation.decisionNote}</p>}
+        </div>
+      )}
       {(request.imageUrl || request.sourceUrl) && (
         <div className="mb-5 flex items-center gap-3 rounded-xl border border-line p-3">
           <ProductImage src={request.imageUrl ?? ''} alt="" hint={request.category} className="size-20 shrink-0 rounded-lg border border-line" />
@@ -272,8 +370,16 @@ function PricingDrawer({ request, onClose }: { request: CustomProductRequest | n
         <dd>{request.category}</dd>
         <dt className="text-ink-3">Estimasi jumlah</dt>
         <dd className="tabular-nums">{request.estimatedQty} unit</dd>
-        <dt className="text-ink-3">Target harga</dt>
-        <dd className="tabular-nums">{request.targetPricePerUnit ? formatRupiah(request.targetPricePerUnit) : '–'}</dd>
+        <dt className="text-ink-3">Pagu / anggaran</dt>
+        <dd className="tabular-nums">
+          {budget ? (
+            <>
+              {formatRupiah(budget)} <span className="text-ink-3">· ± {formatRupiah(Math.round(budget / Math.max(1, request.estimatedQty)))} per unit</span>
+            </>
+          ) : (
+            '–'
+          )}
+        </dd>
         <dt className="text-ink-3">Spesifikasi</dt>
         <dd className="leading-relaxed">{request.specs}</dd>
         {request.referenceUrlOrNotes && (
@@ -308,9 +414,58 @@ function PricingDrawer({ request, onClose }: { request: CustomProductRequest | n
         </div>
         <div className="mt-1 flex justify-between text-[13px]">
           <span className="text-ink-2">Nilai estimasi ({request.estimatedQty} unit)</span>
-          <span className="font-semibold tabular-nums">{formatRupiah(price * request.estimatedQty)}</span>
+          <span className="font-semibold tabular-nums">{formatRupiah(offerTotal)}</span>
         </div>
+        {budget !== undefined && price > 0 && (
+          <p
+            className={cx(
+              'mt-2 rounded-md px-3 py-2 text-[13px]',
+              offerTotal <= budget ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'
+            )}
+          >
+            {offerTotal <= budget
+              ? `Di bawah pagu · sisa ${formatRupiah(budget - offerTotal)}`
+              : `Melebihi pagu ${formatRupiah(offerTotal - budget)}. Pertimbangkan teruskan ke Management.`}
+          </p>
+        )}
       </div>
+
+      {!deciding && !locked && !escalating && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-violet-200 px-4 py-3">
+          <p className="text-xs text-ink-2">Harga perlu dihitung khusus, atau melebihi pagu?</p>
+          <Button size="sm" icon={<ShieldQuestion className="size-4" />} onClick={() => setEscalating('escalate')} disabled={!!saving}>
+            Teruskan ke Management
+          </Button>
+        </div>
+      )}
+
+      {escalating && (
+        <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+          <Field label={escalating === 'escalate' ? 'Alasan diteruskan ke Management' : 'Catatan untuk Sales Support'}>
+            {p => (
+              <Textarea
+                {...p}
+                rows={3}
+                value={escNote}
+                onChange={e => setEscNote(e.target.value)}
+                placeholder={
+                  escalating === 'escalate'
+                    ? 'Contoh: Barang produksi khusus, perlu persetujuan harga & margin.'
+                    : 'Contoh: Margin terlalu tipis, cek ulang harga supplier lain.'
+                }
+              />
+            )}
+          </Field>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setEscalating(null)}>
+              Batal
+            </Button>
+            <Button size="sm" variant={escalating === 'escalate' ? 'secondary' : 'danger'} onClick={submitEscalation} loading={saving === 'PENDING_MANAGEMENT'}>
+              {escalating === 'escalate' ? 'Teruskan ke Management' : 'Kembalikan ke Sales Support'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Field label="Catatan untuk Sales" optional className="mt-5">
         {p => <Textarea {...p} rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Lead time produksi 4 minggu, DP 50%." />}
@@ -384,9 +539,9 @@ export function CustomRequestsPage({ navigate }: { navigate: (r: Route) => void 
                       </span>
                     </span>
                     <span className="text-left sm:text-right">
-                      <span className="block text-xs text-ink-3">{r.assignedSellingPrice ? 'Harga dari Sales Support' : 'Target harga'}</span>
+                      <span className="block text-xs text-ink-3">{r.assignedSellingPrice ? 'Harga per unit' : 'Pagu / anggaran'}</span>
                       <span className="block font-semibold tabular-nums text-ink">
-                        {formatRupiah(r.assignedSellingPrice ?? r.targetPricePerUnit)}
+                        {r.assignedSellingPrice ? formatRupiah(r.assignedSellingPrice) : requestBudget(r) ? formatRupiah(requestBudget(r)!) : '–'}
                       </span>
                     </span>
                     <span className="self-center">

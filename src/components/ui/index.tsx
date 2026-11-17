@@ -79,6 +79,7 @@ const TONE: Record<string, string> = {
   green: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
   red: 'bg-red-50 text-red-800 ring-red-200',
   blue: 'bg-blue-50 text-blue-800 ring-blue-200',
+  violet: 'bg-violet-50 text-violet-800 ring-violet-200',
   gray: 'bg-canvas text-ink-2 ring-line-strong',
 };
 const DOT: Record<string, string> = {
@@ -86,19 +87,23 @@ const DOT: Record<string, string> = {
   green: 'bg-emerald-500',
   red: 'bg-red-500',
   blue: 'bg-blue-500',
+  violet: 'bg-violet-500',
   gray: 'bg-ink-3',
 };
 
 export const STATUS_META: Record<QuotationStatus, { label: string; tone: keyof typeof TONE }> = {
   DRAFT: { label: 'Draf', tone: 'gray' },
   PENDING_REVIEW: { label: 'Menunggu review', tone: 'amber' },
+  PENDING_MANAGEMENT: { label: 'Menunggu Management', tone: 'violet' },
   APPROVED: { label: 'Disetujui', tone: 'green' },
   REJECTED: { label: 'Perlu revisi', tone: 'red' },
   PDF_SENT: { label: 'Terkirim ke Sales', tone: 'blue' },
+  REVISED: { label: 'Direvisi (arsip)', tone: 'gray' },
 };
 
 export const REQUEST_STATUS_META: Record<CustomRequestStatus, { label: string; tone: keyof typeof TONE }> = {
   PENDING_PRICING: { label: 'Menunggu harga', tone: 'amber' },
+  PENDING_MANAGEMENT: { label: 'Menunggu Management', tone: 'violet' },
   PRICED: { label: 'Harga tersedia', tone: 'blue' },
   APPROVED: { label: 'Disetujui', tone: 'green' },
   REJECTED: { label: 'Tidak dapat diproses', tone: 'red' },

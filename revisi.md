@@ -5,7 +5,7 @@ Update file ini setiap ada progres (centang `[x]`, ubah status, isi kolom keputu
 
 **Legenda status:** ✅ Selesai · 🟡 Sebagian · 🔨 Dikerjakan · ⏳ Menunggu keputusan/data · ❌ Belum
 
-_Terakhir diperbarui: 17 Nov 2026 — Tahap 1 selesai; masukan ke-2 dari Agusta ditambahkan (R7 diperjelas, R11–R14 baru)_
+_Terakhir diperbarui: 17 Nov 2026 — Tahap 1 & Tahap 2 selesai; berikutnya Tahap 3 (R13, R14, R8)_
 
 ---
 
@@ -17,18 +17,18 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1 selesai; masukan ke-2 dari Agusta 
 | R2 | Segmen customer opsional | Sales | ✅ Selesai | 1 | Konfirmasi Q2 (pakai usulan default) |
 | R3 | Diskon custom diisi Sales | Sales | ✅ Selesai | 1 | Konfirmasi Q3 (pakai usulan default) |
 | R4 | Centang tampil/sembunyikan PPN & Diskon di PDF | Sales Support | ✅ Selesai | 1 | Konfirmasi Q4 (pakai usulan default) |
-| R5 | Revisi penawaran yang sudah jadi | Sales Support | ❌ Belum | 2 | Keputusan Q5 |
-| R6 | Biaya tambahan jasa pasang & ongkir | Sales Support | ❌ Belum | 2 | Data Q6 |
-| R7 | Eskalasi ke Management (diskon di luar standar & harga custom khusus) | Sales Support | 🟡 Sebagian | 2 | Q7 (sebagian terjawab) |
+| R5 | Revisi penawaran yang sudah jadi | Sales Support | ✅ Selesai | 2 | Konfirmasi Q5 (pakai usulan default) |
+| R6 | Biaya tambahan jasa pasang & ongkir | Sales Support | ✅ Selesai | 2 | Konfirmasi Q6 (pakai usulan default) |
+| R7 | Eskalasi ke Management (diskon di luar standar & harga custom khusus) | Sales Support | ✅ Selesai | 2 | Konfirmasi sisa Q7 |
 | R8 | Analisa lama penawaran | Management | ❌ Belum | 3 | Data Q8 |
 | R9 | Update harga dari PDF supplier ke master data | General | ❌ Belum | 4 | Data Q9 |
 | R10 | Produk custom dicari ke website supplier (selain e-commerce) | General | 🟡 Sebagian | 4 | Data Q10 |
-| R11 | "Target harga per unit" diganti **Pagu / anggaran** | Sales | ❌ Belum | 2 | Q11 |
-| R12 | Aturan diskon **per merek** (bukan per segmen) | Sales Support | ❌ Belum | 2 | Q12 |
+| R11 | "Target harga per unit" diganti **Pagu / anggaran** | Sales | ✅ Selesai | 2 | Konfirmasi Q11 (pakai usulan default) |
+| R12 | Aturan diskon **per merek** (bukan per segmen) | Sales Support | ✅ Selesai | 2 | **Angka diskon per merek dari Agusta (Q12)** — sekarang angka sementara |
 | R13 | Sales update perkembangan penawaran **seminggu sekali** | Sales | ❌ Belum | 3 | Q13 |
 | R14 | Analisis **success rate** penawaran | Management | ❌ Belum | 3 | Q14 (butuh R13) |
 
-**Progres:** 4 dari 14 selesai (Tahap 1).
+**Progres:** 9 dari 14 selesai (Tahap 1 & 2).
 
 ---
 
@@ -84,37 +84,41 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1 selesai; masukan ke-2 dari Agusta 
 
 ### R5 — Revisi penawaran yang sudah jadi
 - **Kondisi sekarang:** revisi hanya untuk penawaran berstatus *Perlu revisi*. Penawaran yang sudah *Disetujui/Terkirim* tidak bisa diubah.
-- **Rencana:** tombol **Buat revisi** → penawaran baru bernomor `-R1`, `-R2`, … → review ulang → PDF baru. PDF lama tetap tersimpan sebagai arsip, riwayat saling terhubung.
+- **Hasil:** ✅ tombol **Buat revisi** di penawaran yang sudah *Disetujui/Terkirim* (Sales pemilik & Sales Support). Terbentuk versi baru `QTN-…-R1`, `-R2`, … berisi salinan item, harga, diskon, dan biaya tambahan. Versi lama berstatus **Direvisi (arsip)**, PDF lamanya tetap bisa diunduh, dan kedua versi saling tertaut.
+  - Dibuat **Sales** → menjadi *Draf revisi* yang dibuka di wizard, lalu Sales mengajukan ulang.
+  - Dibuat **Sales Support** → langsung masuk antrean review.
 - **Butuh dari Agusta:** Q5
 - **Langkah:**
-  - [ ] Model data versi revisi (nomor `-Rn`, tautan ke versi sebelumnya)
-  - [ ] Tombol "Buat revisi" sesuai hak akses (Q5)
-  - [ ] Alur review ulang + notifikasi lonceng/WhatsApp
-  - [ ] Tampilan riwayat versi & PDF lama
-  - [ ] Uji: revisi dari status Disetujui dan Terkirim
+  - [x] Model data versi revisi (nomor `-Rn`, tautan ke versi sebelumnya)
+  - [x] Tombol "Buat revisi" sesuai hak akses (usulan default Q5)
+  - [x] Alur review ulang + notifikasi lonceng/WhatsApp
+  - [x] Tampilan riwayat versi & PDF lama
+  - [x] Uji: revisi dari status Disetujui dan Terkirim
 
 ### R6 — Biaya tambahan jasa pasang & ongkir
 - **Kondisi sekarang:** penawaran hanya berisi produk katalog.
-- **Rencana:** bagian **Biaya tambahan** (jasa pasang, ongkir, lainnya) yang bisa ditambahkan walau Sales lupa, ikut di total dan PDF.
+- **Hasil:** ✅ bagian **Biaya tambahan** (Jasa pasang · Ongkos kirim · Biaya lain + keterangan + jumlah) di keranjang wizard Sales dan di layar review Sales Support. **Kena PPN, tidak kena diskon, tidak dihitung di margin.** Tercetak di surat & PDF di antara total item dan subtotal.
 - **Butuh dari Agusta:** Q6
 - **Langkah:**
-  - [ ] Model data baris biaya tambahan (jenis, keterangan, jumlah, kena PPN/tidak)
-  - [ ] Input di layar review Sales Support (dan di wizard Sales, bila diizinkan)
-  - [ ] Perhitungan total, PPN, margin
-  - [ ] Tampil di PDF
-  - [ ] Uji perhitungan
+  - [x] Model data baris biaya tambahan (jenis, keterangan, jumlah)
+  - [x] Input di layar review Sales Support dan di wizard Sales
+  - [x] Perhitungan total, PPN, margin
+  - [x] Tampil di PDF
+  - [x] Uji perhitungan
 
 ### R7 — Diskon/harga custom diteruskan ke Management
 - **Kondisi sekarang:** 🟡 Sales Support bisa menyetujui sendiri margin di bawah batas (dengan centang konfirmasi). Belum ada alur persetujuan Management.
 - **Rencana (sesuai alur masukan ke-2):** tombol **Teruskan ke Management** di layar review penawaran dan di penetapan harga barang custom. Dipakai Sales Support untuk (a) diskon tambahan di luar standar, (b) barang custom yang harganya perlu dihitung khusus. Sistem juga **menyarankan** eskalasi bila diskon melebihi batas aturan. Status menjadi **Menunggu Management** → Management **menghitung/mengubah harga** lalu menyetujui (atau mengembalikan dengan catatan) → kembali ke Sales Support untuk menerbitkan PDF final ke Sales. Notifikasi lonceng + WhatsApp di setiap perpindahan.
 - **Butuh dari Agusta:** Q7
 - **Langkah:**
-  - [ ] Status & riwayat eskalasi (database)
-  - [ ] Tombol "Teruskan ke Management" + saran otomatis bila diskon di luar standar
-  - [ ] Antrean & layar hitung harga/approval di akun Management (penawaran + barang custom)
-  - [ ] Setelah disetujui: kembali ke Sales Support untuk terbitkan PDF final
-  - [ ] Notifikasi ke Management & balik ke Sales Support/Sales
-  - [ ] Uji tiap aturan
+- **Hasil:** ✅ status baru **Menunggu Management**. Sales Support menekan *Teruskan ke Management* (dengan alasan) di penawaran atau barang custom; sistem **menyarankan** eskalasi bila diskon melewati batas aturan merek, margin di bawah batas, atau harga custom melebihi pagu. Management (antrean & lonceng sendiri) bisa mengubah harga/diskon/biaya lalu **Setujui harga** atau **Kembalikan** dengan catatan → kembali ke Sales Support yang menerbitkan PDF final / menyetujui harga custom. Selama menunggu Management, Sales Support tidak bisa mengubah atau menyetujui.
+- **Langkah:**
+  - [x] Status & riwayat eskalasi (database)
+  - [x] Tombol "Teruskan ke Management" + saran otomatis bila diskon di luar standar
+  - [x] Antrean & layar hitung harga/approval di akun Management (penawaran + barang custom)
+  - [x] Setelah disetujui: kembali ke Sales Support untuk terbitkan PDF final
+  - [x] Notifikasi ke Management & balik ke Sales Support
+  - [x] Uji tiap alur
 
 ### R8 — Analisa lama penawaran
 - **Kondisi sekarang:** waktu tiap tahap sudah tercatat di riwayat penawaran, tetapi belum diolah. Laporan yang ada baru margin per Sales & per segmen.
@@ -151,24 +155,24 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1 selesai; masukan ke-2 dari Agusta 
 
 ### R11 — "Target harga per unit" diganti Pagu / anggaran
 - **Kondisi sekarang:** form barang custom punya field *Target harga per unit (opsional)*.
-- **Rencana:** ganti menjadi **Pagu / anggaran** (Rp). Ditampilkan ke Sales Support saat menghitung harga, dibandingkan dengan hasil riset harga pasar dan harga final (di atas/di bawah pagu).
+- **Hasil:** ✅ field **Pagu / anggaran** (total untuk seluruh jumlah, opsional; per unit dihitung otomatis). Sales Support melihat pagu + indikator **Di bawah pagu / Melebihi pagu** saat menghitung harga; harga jual awal diisi dari pagu per unit. Request lama (target per unit) tetap tampil sebagai pagu.
 - **Butuh dari Agusta:** Q11
 - **Langkah:**
-  - [ ] Ubah field & label di form barang custom (dan data lama ikut terbawa)
-  - [ ] Tampilkan pagu di layar Sales Support + indikator di atas/di bawah pagu
-  - [ ] Uji
+  - [x] Ubah field & label di form barang custom (dan data lama ikut terbawa)
+  - [x] Tampilkan pagu di layar Sales Support + indikator di atas/di bawah pagu
+  - [x] Uji
 
 ### R12 — Aturan diskon per merek (bukan per segmen)
 - **Kondisi sekarang:** aturan diskon (saran %, maks %, margin min.) disusun per **segmen customer** dan jumlah barang.
-- **Rencana:** aturan disusun per **merek** (Indachi, Chairman, Lenovo, …) dan jumlah barang. Saran diskon di wizard mengikuti merek tiap item. Segmen customer tetap ada sebagai info & laporan (sudah opsional, R2).
+- **Hasil:** ✅ halaman **Aturan diskon per merek** (+ baris *Semua merek lain*), simulator per merek. Saran & batas diskon di wizard dan batas margin di review mengikuti merek tiap item. Segmen customer kini hanya info & laporan. Merek bisa diedit di Katalog dan terisi otomatis dari spesifikasi produk agusta.co.id. **Angka aturan masih sementara** sampai Agusta mengirim angka per merek (Q12).
 - **Catatan data:** produk hasil sinkron agusta.co.id belum punya kolom merek terpisah. Merek diambil dari spesifikasi ("Merek: …") / nama produk, dan bisa dikoreksi di Katalog.
 - **Butuh dari Agusta:** Q12
 - **Langkah:**
-  - [ ] Merek di master produk (isi otomatis dari spesifikasi/nama + bisa diedit)
-  - [ ] Halaman Aturan diskon per merek (+ aturan "merek lainnya")
-  - [ ] Saran & batas diskon per item mengikuti merek
-  - [ ] Pindahkan aturan lama / isi aturan awal
-  - [ ] Uji wizard, review, simulator aturan
+  - [x] Merek di master produk (isi otomatis dari spesifikasi + bisa diedit)
+  - [x] Halaman Aturan diskon per merek (+ aturan "merek lainnya")
+  - [x] Saran & batas diskon per item mengikuti merek
+  - [x] Isi aturan awal (angka sementara)
+  - [x] Uji wizard, review, simulator aturan
 
 ### R13 — Sales update perkembangan penawaran seminggu sekali
 - **Kondisi sekarang:** setelah PDF terkirim, penawaran berhenti di status *Terkirim*. Tidak ada catatan tindak lanjut.
@@ -233,6 +237,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 
 | Tanggal | Revisi | Catatan |
 |---|---|---|
+| 17 Nov 2026 | R5, R6, R7, R11, R12 | **Tahap 2 selesai** (belum di-push). Memakai usulan default Q5, Q6, sisa Q7, Q11; **angka aturan diskon per merek masih sementara (Q12)**. Database: migrasi `20261118000000_tahap2_workflow.sql`. Diuji: 28 unit test, database (PGlite, termasuk regresi 5 migrasi sebelumnya), dan alur di browser dengan 3 role. |
 | 17 Nov 2026 | R7, R11–R14 | **Masukan ke-2 dari Agusta:** alur eskalasi Management diperjelas (R7, Q7 sebagian terjawab); baru: pagu/anggaran (R11), aturan diskon per merek (R12), update mingguan Sales (R13), analisis success rate (R14). |
 | 17 Nov 2026 | R1–R4 | **Tahap 1 live di production** (commit `ed4d730`, Vercel *Ready*): https://agusta-quotation-portal.vercel.app |
 | 17 Nov 2026 | R1–R4 | **Tahap 1 selesai.** Memakai usulan default Q2–Q4 (mohon dikonfirmasi tim Agusta). Database: migrasi `20261117000000_quote_options.sql`. Diuji: unit test, database (PGlite), dan alur di browser. |

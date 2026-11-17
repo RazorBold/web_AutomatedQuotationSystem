@@ -1,5 +1,5 @@
 import type { Product } from '../types';
-import { agustaImageUrl, type AgustaProduct } from '../utils/agustaCatalog';
+import { agustaImageUrl, brandFromSpecs, type AgustaProduct } from '../utils/agustaCatalog';
 import type { MarketSearchResult } from '../utils/marketResearch';
 
 type TokenGetter = () => Promise<string | null>;
@@ -30,7 +30,7 @@ export function productFromAgusta(a: AgustaProduct): Product {
     name: a.name.toUpperCase(),
     sku: a.sku,
     category: a.category,
-    brand: '',
+    brand: brandFromSpecs(a.specs),
     basePrice: 0,
     cogs: 0,
     image: agustaImageUrl(a.imagePath),

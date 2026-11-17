@@ -13,6 +13,7 @@ import {
   type NewQuotationInput,
   type NewUserInput,
   type QuotationAdjustments,
+  type EscalationDecision,
   type Result,
   type Snapshot,
   type UserPatch,
@@ -88,7 +89,14 @@ interface Store {
   priceCustomRequest: (id: string, patch: CustomRequestPricing) => Promise<void>;
 
   setDiscountRules: (rules: DiscountRule[]) => Promise<void>;
-  updateProduct: (id: string, patch: Partial<Pick<Product, 'cogs' | 'basePrice' | 'stock'>>) => Promise<void>;
+  updateProduct: (id: string, patch: Partial<Pick<Product, 'cogs' | 'basePrice' | 'stock' | 'brand'>>) => Promise<void>;
+
+  escalateQuotation: (id: string, note: string, items: QuotationItemData[], supportNotes?: string, adjustments?: QuotationAdjustments) => Promise<void>;
+  decideQuotationEscalation: (id: string, decision: EscalationDecision, note: string, items: QuotationItemData[], adjustments?: QuotationAdjustments) => Promise<void>;
+  escalateCustomRequest: (id: string, note: string, cogs: number, sellingPrice: number) => Promise<void>;
+  decideCustomRequestEscalation: (id: string, decision: EscalationDecision, note: string, cogs: number, sellingPrice: number) => Promise<void>;
+  /** Returns the id of the new revision. */
+  createQuotationRevision: (id: string) => Promise<string>;
 
   addUser: (user: NewUserInput) => Promise<Result>;
   updateUser: (id: string, patch: UserPatch) => Promise<Result>;
@@ -264,6 +272,28 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     await refresh();
   };
 
+  const escalateQuotation: Store['escalateQuotation'] = async (id, note, items, supportNotes, adjustments) => {
+    await backend.escalateQuotation(actor(), id, note, items, supportNotes, adjustments);
+    await refresh();
+  };
+  const decideQuotationEscalation: Store['decideQuotationEscalation'] = async (id, decision, note, items, adjustments) => {
+    await backend.decideQuotationEscalation(actor(), id, decision, note, items, adjustments);
+    await refresh();
+  };
+  const escalateCustomRequest: Store['escalateCustomRequest'] = async (id, note, cogs, sellingPrice) => {
+    await backend.escalateCustomRequest(actor(), id, note, cogs, sellingPrice);
+    await refresh();
+  };
+  const decideCustomRequestEscalation: Store['decideCustomRequestEscalation'] = async (id, decision, note, cogs, sellingPrice) => {
+    await backend.decideCustomRequestEscalation(actor(), id, decision, note, cogs, sellingPrice);
+    await refresh();
+  };
+  const createQuotationRevision: Store['createQuotationRevision'] = async id => {
+    const newId = await backend.createQuotationRevision(actor(), id);
+    await refresh();
+    return newId;
+  };
+
   const updateProduct: Store['updateProduct'] = async (id, patch) => {
     await backend.updateProduct(actor(), id, patch);
     await refresh();
@@ -349,6 +379,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     priceCustomRequest,
     setDiscountRules,
     updateProduct,
+    escalateQuotation,
+    decideQuotationEscalation,
+    escalateCustomRequest,
+    decideCustomRequestEscalation,
+    createQuotationRevision,
     addUser,
     updateUser,
     resetDemoData,

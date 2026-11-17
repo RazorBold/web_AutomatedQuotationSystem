@@ -3,11 +3,11 @@
  * Behaviour matches the original prototype; WhatsApp is always simulated.
  */
 import { INITIAL_CUSTOM_REQUESTS, INITIAL_QUOTATIONS, PRODUCTS, USERS } from '../data/mockData';
-import type { AppNotification, NotificationType, Product, Quotation, QuotationEvent, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, NotificationType, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
 import { can, type Permission } from '../auth/permissions';
-import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, generateQuotationNumber } from '../utils/quotationEngine';
+import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, generateQuotationNumber, normalizeBrand } from '../utils/quotationEngine';
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
-import type { Backend, Snapshot } from './types';
+import type { Backend, ChargeInput, QuotationAdjustments, Snapshot } from './types';
 import { agustaApi, productFromAgusta, sameProduct } from './agustaApi';
 
 const STORAGE_KEY = 'agusta-qs:v3';
@@ -35,7 +35,8 @@ export const initials = (name: string) =>
 
 function withTotals(q: Quotation, items: QuotationItemData[]): Quotation {
   const normalized = items.map(i => ({ ...i, subtotal: calculateLineSubtotal(i) }));
-  const t = calculateQuotationTotals(normalized, true, 11, q.extraDiscount ?? 0);
+  const charges = (q.charges ?? []).reduce((sum, c) => sum + c.amount, 0);
+  const t = calculateQuotationTotals(normalized, true, 11, q.extraDiscount ?? 0, charges);
   return {
     ...q,
     items: normalized,
@@ -82,7 +83,9 @@ function read(): State {
       quotations: (p.quotations ?? base.quotations).map(seedHistory),
       products: p.products ?? base.products,
       customRequests: p.customRequests ?? base.customRequests,
-      discountRules: p.discountRules ?? base.discountRules,
+      // Rules saved before the switch to per-brand rules (R12) are replaced by the new defaults.
+      discountRules:
+        p.discountRules && !p.discountRules.some(r => 'customerCategory' in (r as object)) ? p.discountRules : base.discountRules,
       notifications: p.notifications ?? [],
       sessionUserId: p.sessionUserId ?? null,
     };
@@ -105,6 +108,13 @@ export function createLocalBackend(): Backend {
   const require = (actor: UserProfile, permission: Permission) => {
     if (!can(actor, permission)) throw new Error('Anda tidak memiliki akses untuk tindakan ini.');
   };
+
+  const withCharges = (c: ChargeInput[] | undefined, fallback?: QuotationCharge[]): QuotationCharge[] | undefined =>
+    c ? c.filter(x => x.amount > 0 && x.label.trim()).map((x, i) => ({ ...x, label: x.label.trim(), id: `chg-${Date.now()}-${i}` })) : fallback;
+  const applyAdj = (q: Quotation, a?: QuotationAdjustments): Quotation =>
+    a ? { ...q, ...a, charges: withCharges(a.charges, q.charges) } : q;
+  const usersWithRole = (role: UserProfile['role']) => state.users.filter(u => u.status === 'ACTIVE' && u.role === role).map(u => u.id);
+  const escalationEvent = (actor: UserProfile, note: string) => ({ note: note.trim(), by: actor.name, byId: actor.id, at: now() });
 
   const patchQuotation = (id: string, fn: (q: Quotation) => Quotation) => {
     state = { ...state, quotations: state.quotations.map(q => (q.id === id ? fn(q) : q)) };
@@ -212,6 +222,7 @@ export function createLocalBackend(): Backend {
             ...cur,
             category: cur.sourceId ? fresh.category : cur.category,
             image: cur.image || fresh.image,
+            brand: cur.brand || fresh.brand,
             specs: fresh.specs || cur.specs,
             sourceId: a.sourceId,
             sourceUrl: a.url,
@@ -277,6 +288,7 @@ export function createLocalBackend(): Backend {
             customer: input.customer,
             salesNotes: input.salesNotes,
             extraDiscount: input.extraDiscount ?? existing?.extraDiscount ?? 0,
+            charges: withCharges(input.charges, existing.charges),
             status: 'PENDING_REVIEW',
             rejectionReason: undefined,
             history: [...(existing.history ?? []), { at: now(), by: actor.name, label: 'Direvisi dan diajukan ulang' }],
@@ -303,6 +315,7 @@ export function createLocalBackend(): Backend {
             grossMarginPercent: 0,
             salesNotes: input.salesNotes,
             extraDiscount: input.extraDiscount ?? 0,
+            charges: withCharges(input.charges),
             whatsAppStatus: 'PENDING',
             history: [{ at: now(), by: actor.name, label: 'Diajukan ke Sales Support' }],
           };
@@ -323,7 +336,7 @@ export function createLocalBackend(): Backend {
 
     async saveQuotationPricing(actor, id, items, supportNotes, adjustments) {
       require(actor, 'cogs:edit');
-      patchQuotation(id, q => ({ ...repriced({ ...q, ...adjustments }, items), supportNotes: supportNotes ?? q.supportNotes }));
+      patchQuotation(id, q => ({ ...repriced(applyAdj(q, adjustments), items), supportNotes: supportNotes ?? q.supportNotes }));
     },
 
     async approveQuotation(actor, id, items, supportNotes, adjustments) {
@@ -331,7 +344,7 @@ export function createLocalBackend(): Backend {
       const q = state.quotations.find(x => x.id === id);
       if (!q || q.status !== 'PENDING_REVIEW') throw new Error('Penawaran ini tidak sedang menunggu review.');
       patchQuotation(id, cur => ({
-        ...repriced({ ...cur, ...adjustments }, items),
+        ...repriced(applyAdj(cur, adjustments), items),
         supportNotes,
         status: 'APPROVED',
         reviewedBy: actor.name,
@@ -393,10 +406,144 @@ export function createLocalBackend(): Backend {
       });
     },
 
+    async escalateQuotation(actor, id, note, items, supportNotes, adjustments) {
+      require(actor, 'quotation:review');
+      const q = state.quotations.find(x => x.id === id);
+      if (!q || q.status !== 'PENDING_REVIEW') throw new Error('Hanya penawaran yang menunggu review yang bisa diteruskan ke Management.');
+      if (note.trim().length < 5) throw new Error('Tulis alasan eskalasi untuk Management.');
+      patchQuotation(id, cur => ({
+        ...repriced(applyAdj(cur, adjustments), items),
+        supportNotes: supportNotes ?? cur.supportNotes,
+        status: 'PENDING_MANAGEMENT',
+        escalation: escalationEvent(actor, note),
+        history: [...(cur.history ?? []), { at: now(), by: actor.name, label: 'Diteruskan ke Management', note: note.trim() }],
+      }));
+      notify(actor, usersWithRole('MANAGEMENT'), 'QUOTATION_ESCALATED', `Eskalasi dari ${actor.name}`, `${qRef(q)} · ${note.trim()}`, { quotationId: id });
+    },
+
+    async decideQuotationEscalation(actor, id, decision, note, items, adjustments) {
+      if (actor.role !== 'MANAGEMENT') throw new Error('Hanya Management yang dapat memutuskan eskalasi.');
+      const q = state.quotations.find(x => x.id === id);
+      if (!q || q.status !== 'PENDING_MANAGEMENT') throw new Error('Penawaran ini tidak sedang menunggu Management.');
+      if (decision === 'RETURNED' && note.trim().length < 5) throw new Error('Tulis catatan untuk Sales Support.');
+      patchQuotation(id, cur => ({
+        ...repriced(applyAdj(cur, adjustments), items),
+        status: 'PENDING_REVIEW',
+        escalation: { ...cur.escalation!, decision, decisionNote: note.trim() || undefined, decidedBy: actor.name, decidedAt: now() },
+        history: [
+          ...(cur.history ?? []),
+          { at: now(), by: actor.name, label: decision === 'APPROVED' ? 'Disetujui Management' : 'Dikembalikan Management ke Sales Support', note: note.trim() || undefined },
+        ],
+      }));
+      if (q.escalation?.byId) {
+        notify(actor, [q.escalation.byId], 'QUOTATION_MGMT_DECIDED', decision === 'APPROVED' ? 'Management menyetujui harga' : 'Management mengembalikan penawaran', `${qRef(q)}${note.trim() ? ` · ${note.trim()}` : ''}`, { quotationId: id });
+      }
+    },
+
+    async escalateCustomRequest(actor, id, note, cogs, sellingPrice) {
+      require(actor, 'custom-request:price');
+      const req = state.customRequests.find(r => r.id === id);
+      if (!req || !['PENDING_PRICING', 'PRICED'].includes(req.status)) throw new Error('Request ini tidak bisa diteruskan ke Management.');
+      if (note.trim().length < 5) throw new Error('Tulis alasan eskalasi untuk Management.');
+      state = {
+        ...state,
+        customRequests: state.customRequests.map(r =>
+          r.id === id
+            ? { ...r, status: 'PENDING_MANAGEMENT', assignedCogs: cogs || r.assignedCogs, assignedSellingPrice: sellingPrice || r.assignedSellingPrice, escalation: escalationEvent(actor, note) }
+            : r
+        ),
+      };
+      save();
+      notify(actor, usersWithRole('MANAGEMENT'), 'CUSTOM_REQUEST_ESCALATED', `Eskalasi harga custom dari ${actor.name}`, `${req.productName} · ${note.trim()}`, { requestId: id });
+    },
+
+    async decideCustomRequestEscalation(actor, id, decision, note, cogs, sellingPrice) {
+      if (actor.role !== 'MANAGEMENT') throw new Error('Hanya Management yang dapat memutuskan eskalasi.');
+      const req = state.customRequests.find(r => r.id === id);
+      if (!req || req.status !== 'PENDING_MANAGEMENT') throw new Error('Request ini tidak sedang menunggu Management.');
+      if (decision === 'APPROVED' && (!cogs || !sellingPrice)) throw new Error('Isi HPP dan harga jual terlebih dahulu.');
+      if (decision === 'RETURNED' && note.trim().length < 5) throw new Error('Tulis catatan untuk Sales Support.');
+      state = {
+        ...state,
+        customRequests: state.customRequests.map(r =>
+          r.id === id
+            ? {
+                ...r,
+                status: decision === 'APPROVED' ? 'PRICED' : 'PENDING_PRICING',
+                assignedCogs: decision === 'APPROVED' ? cogs : r.assignedCogs,
+                assignedSellingPrice: decision === 'APPROVED' ? sellingPrice : r.assignedSellingPrice,
+                escalation: { ...r.escalation!, decision, decisionNote: note.trim() || undefined, decidedBy: actor.name, decidedAt: now() },
+              }
+            : r
+        ),
+      };
+      save();
+      if (req.escalation?.byId) {
+        notify(
+          actor,
+          [req.escalation.byId],
+          'CUSTOM_REQUEST_MGMT_DECIDED',
+          decision === 'APPROVED' ? 'Management menetapkan harga custom' : 'Management mengembalikan request custom',
+          `${req.productName}${decision === 'APPROVED' ? ` · ${formatRupiah(sellingPrice)} per unit` : ''}${note.trim() ? ` · ${note.trim()}` : ''}`,
+          { requestId: id }
+        );
+      }
+    },
+
+    async createQuotationRevision(actor, id) {
+      const q = state.quotations.find(x => x.id === id);
+      if (!q) throw new Error('Penawaran tidak ditemukan.');
+      const isSales = actor.role === 'SALES' && q.salesId === actor.id;
+      if (!isSales && !can(actor, 'quotation:review')) throw new Error('Anda tidak memiliki akses untuk merevisi penawaran ini.');
+      if (q.status !== 'APPROVED' && q.status !== 'PDF_SENT') throw new Error('Hanya penawaran yang sudah disetujui/terkirim yang bisa direvisi dengan cara ini.');
+      const root = q.quotationNumber.replace(/-R\d+$/, '');
+      const no =
+        Math.max(0, ...state.quotations.filter(x => x.quotationNumber === root || x.quotationNumber.startsWith(`${root}-R`)).map(x => x.revisionNo ?? 0)) + 1;
+      const number = `${root}-R${no}`;
+      const newId = `qtn-${Date.now()}`;
+      const fresh: Quotation = withTotals(
+        {
+          ...q,
+          id: newId,
+          quotationNumber: number,
+          date: now(false),
+          validUntil: new Date(Date.now() + 14 * 86400000).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
+          status: isSales ? 'DRAFT' : 'PENDING_REVIEW',
+          reviewedBy: undefined,
+          reviewedAt: undefined,
+          rejectionReason: undefined,
+          pdfGeneratedAt: undefined,
+          pdfPath: undefined,
+          whatsAppStatus: 'PENDING',
+          escalation: undefined,
+          revisionOf: q.id,
+          revisionNo: no,
+          revisedTo: undefined,
+          history: [{ at: now(), by: actor.name, label: `Revisi dari ${q.quotationNumber}` }],
+        },
+        q.items.map((it, i) => ({ ...it, id: `item-${Date.now()}-${i}` }))
+      );
+      state = {
+        ...state,
+        quotations: [
+          fresh,
+          ...state.quotations.map(x =>
+            x.id === id
+              ? { ...x, status: 'REVISED' as const, revisedTo: newId, history: [...(x.history ?? []), { at: now(), by: actor.name, label: `Direvisi menjadi ${number}` }] }
+              : x
+          ),
+        ],
+      };
+      save();
+      if (!isSales) notify(actor, reviewers(), 'QUOTATION_SUBMITTED', `Revisi penawaran ${number}`, `${qRef(fresh)} · ${formatRupiah(fresh.grandTotal)}`, { quotationId: newId });
+      return newId;
+    },
+
     async priceCustomRequest(actor, id, patch) {
       require(actor, 'custom-request:price');
       const req = state.customRequests.find(r => r.id === id);
       if (!req) throw new Error('Request tidak ditemukan.');
+      if (req.status === 'PENDING_MANAGEMENT') throw new Error('Request ini sedang menunggu keputusan Management.');
       let productId = req.productId;
       let products = state.products;
 
@@ -408,7 +555,7 @@ export function createLocalBackend(): Backend {
           name: req.productName.toUpperCase(),
           sku: `CST-${req.id.replace(/\D/g, '').slice(-6).padStart(6, '0')}`,
           category: req.category,
-          brand: 'Custom',
+          brand: 'CUSTOM',
           basePrice: patch.assignedSellingPrice,
           cogs: patch.assignedCogs,
           image: req.imageUrl ?? '',
@@ -446,7 +593,8 @@ export function createLocalBackend(): Backend {
 
     async updateProduct(actor, id, patch) {
       require(actor, 'cogs:edit');
-      state = { ...state, products: state.products.map(p => (p.id === id ? { ...p, ...patch } : p)) };
+      const clean = patch.brand !== undefined ? { ...patch, brand: normalizeBrand(patch.brand) } : patch;
+      state = { ...state, products: state.products.map(p => (p.id === id ? { ...p, ...clean } : p)) };
       save();
     },
 

@@ -157,9 +157,11 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
   }
 
   // Sales Support / Management
-  const queue = quotations.filter(q => q.status === 'PENDING_REVIEW');
+  // Management's own queue is the escalations (R7); Sales Support reviews new submissions.
+  const isManagement = currentUser.role === 'MANAGEMENT';
+  const queue = quotations.filter(q => q.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_REVIEW'));
   const belowFloor = queue.filter(q => q.grossMarginPercent < MARGIN_FLOOR);
-  const pricing = customRequests.filter(r => r.status === 'PENDING_PRICING');
+  const pricing = customRequests.filter(r => r.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_PRICING'));
   const toSend = quotations.filter(q => q.status === 'APPROVED');
   const activity = quotations
     .flatMap(q => (q.history ?? []).map(h => ({ ...h, q })))
@@ -173,8 +175,10 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
         title={`${greeting()}, ${firstName}`}
         description={
           queue.length
-            ? `${queue.length} penawaran menunggu review Anda.`
-            : 'Antrean review kosong. Semua pengajuan sudah ditangani.'
+            ? `${queue.length} penawaran menunggu ${isManagement ? 'keputusan' : 'review'} Anda.`
+            : isManagement
+              ? 'Tidak ada eskalasi yang menunggu keputusan Anda.'
+              : 'Antrean review kosong. Semua pengajuan sudah ditangani.'
         }
         actions={
           queue.length > 0 && (
@@ -186,7 +190,7 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
       >
         <HeroStats
           items={[
-            { label: 'Menunggu review', value: queue.length },
+            { label: isManagement ? 'Menunggu keputusan' : 'Menunggu review', value: queue.length },
             { label: `Margin di bawah ${MARGIN_FLOOR}%`, value: belowFloor.length, flag: belowFloor.length ? 'Perlu dicek' : undefined },
             { label: 'Disetujui, belum dikirim', value: toSend.length },
             { label: 'Nilai disetujui', value: approvedValue(quotations) },
@@ -195,7 +199,7 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
       </PageHeader>
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Antrean review" description="Yang paling lama menunggu ada di atas." bodyClassName="" className="self-start">
+        <Panel title={isManagement ? 'Eskalasi dari Sales Support' : 'Antrean review'} description="Yang paling lama menunggu ada di atas." bodyClassName="" className="self-start">
           {queue.length === 0 ? (
             <EmptyState icon={<Inbox className="size-5" />} title="Antrean kosong" description="Pengajuan baru dari Sales akan muncul di sini." />
           ) : (
@@ -231,7 +235,11 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
         <div className="flex flex-col gap-6">
           <Panel
             title="Barang custom"
-            description={pricing.length ? `${pricing.length} menunggu perhitungan harga` : 'Semua request sudah diberi harga'}
+            description={
+              pricing.length
+                ? `${pricing.length} ${isManagement ? 'menunggu keputusan harga Anda' : 'menunggu perhitungan harga'}`
+                : 'Semua request sudah diberi harga'
+            }
             actions={
               <Button size="sm" variant="ghost" onClick={() => navigate({ view: 'custom-requests' })}>
                 Buka
@@ -245,7 +253,7 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
                   <li key={r.id} className="px-5 py-3">
                     <p className="line-clamp-1 text-[13px] font-semibold text-ink">{r.productName}</p>
                     <p className="text-xs text-ink-3">
-                      {r.salesName} · {r.estimatedQty} unit · target {formatRupiah(r.targetPricePerUnit)}
+                      {r.salesName} · {r.estimatedQty} unit{(r.budgetTotal ?? r.targetPricePerUnit * r.estimatedQty) ? ` · pagu ${formatRupiah(r.budgetTotal ?? r.targetPricePerUnit * r.estimatedQty)}` : ''}
                     </p>
                   </li>
                 ))}

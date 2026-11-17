@@ -102,23 +102,26 @@ function SyncDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 function ProductDrawer({ product, onClose, navigate }: { product: Product | null; onClose: () => void; navigate: (r: Route) => void }) {
-  const { currentUser, updateProduct, notify } = useStore();
+  const { currentUser, updateProduct, notify, products, discountRules } = useStore();
+  const knownBrands = Array.from(new Set([...discountRules.map(r => r.brand ?? ''), ...products.map(p => p.brand)].map(b => b.trim().toUpperCase()).filter(Boolean))).sort();
   const canCogs = can(currentUser, 'cogs:view');
   const canEdit = can(currentUser, 'cogs:edit');
   const [cogs, setCogs] = useState(0);
   const [price, setPrice] = useState(0);
   const [lastId, setLastId] = useState<string | null>(null);
   const [askPrice, setAskPrice] = useState(false);
+  const [brand, setBrand] = useState('');
 
   if (product && product.id !== lastId) {
     setLastId(product.id);
     setCogs(product.cogs);
     setPrice(product.basePrice);
+    setBrand(product.brand ?? '');
   }
   if (!product) return null;
 
   const margin = price > 0 ? ((price - cogs) / price) * 100 : 0;
-  const dirty = cogs !== product.cogs || price !== product.basePrice;
+  const dirty = cogs !== product.cogs || price !== product.basePrice || brand.trim().toUpperCase() !== (product.brand ?? '').toUpperCase();
   const num = (v: string) => Number(v.replace(/[^\d]/g, '')) || 0;
 
   const priced = product.basePrice > 0;
@@ -166,7 +169,7 @@ function ProductDrawer({ product, onClose, navigate }: { product: Product | null
             variant="primary"
             disabled={!dirty}
             onClick={() => {
-              updateProduct(product.id, { cogs, basePrice: price })
+              updateProduct(product.id, { cogs, basePrice: price, brand: brand.trim().toUpperCase() })
                 .then(() => {
                   notify(`Harga ${product.name} disimpan.`);
                   onClose();
@@ -208,6 +211,7 @@ function ProductDrawer({ product, onClose, navigate }: { product: Product | null
       <h3 className="mt-6 text-sm font-semibold text-ink">Spesifikasi teknis</h3>
       <dl className="mt-2 divide-y divide-line overflow-hidden rounded-lg border border-line text-[13px]">
         {[
+          ['Merek', product.brand || '–'],
           ['Kategori', product.category],
           ['Berat', product.weightKg ? `${product.weightKg.toLocaleString('id-ID')} kg` : '–'],
           ['Dimensi', product.dimensions ?? '–'],
@@ -223,6 +227,24 @@ function ProductDrawer({ product, onClose, navigate }: { product: Product | null
       <h3 className="mt-6 text-sm font-semibold text-ink">Harga</h3>
       {canCogs ? (
         <div className="mt-2 rounded-lg border border-line p-4">
+          <Field label="Merek" hint="Menentukan aturan diskon yang berlaku untuk produk ini." className="mb-4">
+            {p => (
+              <Input
+                {...p}
+                list="catalog-brands"
+                disabled={!canEdit}
+                className="uppercase"
+                value={brand}
+                onChange={e => setBrand(e.target.value)}
+                placeholder="Mis. INDACHI"
+              />
+            )}
+          </Field>
+          <datalist id="catalog-brands">
+            {knownBrands.map(b => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
           <div className="grid grid-cols-2 gap-4">
             <Field label="HPP / unit">
               {p => <Input {...p} inputMode="numeric" disabled={!canEdit} className="text-right tabular-nums" value={cogs.toLocaleString('id-ID')} onChange={e => setCogs(num(e.target.value))} />}

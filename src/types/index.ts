@@ -16,7 +16,34 @@ export interface UserProfile {
   lastLoginAt?: string;
 }
 
-export type QuotationStatus = 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'PDF_SENT';
+/**
+ * DRAFT → PENDING_REVIEW → (PENDING_MANAGEMENT →) PENDING_REVIEW → APPROVED → PDF_SENT
+ * REJECTED: back to Sales. REVISED: superseded by a newer revision (-R1, -R2 …), kept as archive.
+ */
+export type QuotationStatus = 'DRAFT' | 'PENDING_REVIEW' | 'PENDING_MANAGEMENT' | 'APPROVED' | 'REJECTED' | 'PDF_SENT' | 'REVISED';
+
+/** Additional charge outside the catalog (R6). Subject to PPN, not discounted, no margin. */
+export type ChargeKind = 'INSTALL' | 'SHIPPING' | 'OTHER';
+export interface QuotationCharge {
+  id: string;
+  kind: ChargeKind;
+  /** Free text shown on the document, e.g. "Jasa pasang 20 unit" or "Ongkir ke Bandung". */
+  label: string;
+  amount: number;
+}
+
+/** Forwarding to Management (R7), for a quotation or a custom request. */
+export interface Escalation {
+  /** Why Sales Support forwarded it. */
+  note: string;
+  by: string;
+  byId?: string;
+  at: string;
+  decision?: 'APPROVED' | 'RETURNED';
+  decisionNote?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+}
 
 export interface Product {
   id: string;
@@ -101,6 +128,14 @@ export interface Quotation {
   showTax?: boolean;
   /** PDF display: show the discount column (default true). When false unit prices are shown after discount. */
   showDiscount?: boolean;
+  /** Additional charges: jasa pasang, ongkir, lainnya (R6). */
+  charges?: QuotationCharge[];
+  /** Latest forwarding to Management, if any (R7). */
+  escalation?: Escalation;
+  /** Revision chain (R5): the quotation this one revises, its revision number, and the newer one. */
+  revisionOf?: string;
+  revisionNo?: number;
+  revisedTo?: string;
   taxRatePercent: number;
   taxAmount: number;
   grandTotal: number;
@@ -129,7 +164,11 @@ export type NotificationType =
   | 'CUSTOM_REQUEST_SUBMITTED'
   | 'CUSTOM_REQUEST_PRICED'
   | 'CUSTOM_REQUEST_APPROVED'
-  | 'CUSTOM_REQUEST_REJECTED';
+  | 'CUSTOM_REQUEST_REJECTED'
+  | 'QUOTATION_ESCALATED'
+  | 'QUOTATION_MGMT_DECIDED'
+  | 'CUSTOM_REQUEST_ESCALATED'
+  | 'CUSTOM_REQUEST_MGMT_DECIDED';
 
 export interface AppNotification {
   id: string;
@@ -146,7 +185,7 @@ export interface AppNotification {
   read: boolean;
 }
 
-export type CustomRequestStatus ='PENDING_PRICING' | 'PRICED' | 'APPROVED' | 'REJECTED';
+export type CustomRequestStatus = 'PENDING_PRICING' | 'PENDING_MANAGEMENT' | 'PRICED' | 'APPROVED' | 'REJECTED';
 
 export interface CustomProductRequest {
   id: string;
@@ -155,7 +194,10 @@ export interface CustomProductRequest {
   productName: string;
   category: string;
   estimatedQty: number;
+  /** Legacy: target price per unit (before pagu/anggaran). Kept for older requests. */
   targetPricePerUnit: number;
+  /** Customer's budget (pagu/anggaran) for the whole quantity, in rupiah (R11). */
+  budgetTotal?: number;
   specs: string;
   referenceUrlOrNotes: string;
   submittedAt: string;
@@ -171,4 +213,6 @@ export interface CustomProductRequest {
   sourceUrl?: string;
   /** Supplier chosen during market research (Sales Support / Management only — like HPP). */
   supplier?: { name: string; url?: string; price: number };
+  /** Forwarding to Management for special pricing (R7). */
+  escalation?: Escalation;
 }

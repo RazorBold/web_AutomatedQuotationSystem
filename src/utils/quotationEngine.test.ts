@@ -79,18 +79,18 @@ test('calculateQuotationTotals computes subtotal, PPN 11%, grand total and COGS 
   assert.equal(totals.totalItemsCount, 15);
 });
 
-test('getSuggestedDiscount returns tiered discount based on quantity and customer segment', () => {
-  // Corporate low qty
-  assert.equal(getSuggestedDiscount(2, 'CORPORATE').suggestedPercent, 0);
-  // Corporate 10 units -> 5%
-  assert.equal(getSuggestedDiscount(10, 'CORPORATE').suggestedPercent, 5);
-  // Corporate 25 units -> 8%
-  assert.equal(getSuggestedDiscount(25, 'CORPORATE').suggestedPercent, 8);
-  // Corporate 60 units -> 10%
-  assert.equal(getSuggestedDiscount(60, 'CORPORATE').suggestedPercent, 10);
-
-  // BUMN / Gov automatic 5%
-  assert.equal(getSuggestedDiscount(1, 'BUMN_GOV').suggestedPercent, 5);
+test('getSuggestedDiscount follows brand (merek) and quantity tiers', () => {
+  // Indachi tiers
+  assert.equal(getSuggestedDiscount(2, 'INDACHI').suggestedPercent, 0);
+  assert.equal(getSuggestedDiscount(10, 'Indachi ').suggestedPercent, 5); // case/space-insensitive
+  assert.equal(getSuggestedDiscount(60, 'INDACHI').suggestedPercent, 8);
+  assert.equal(getSuggestedDiscount(60, 'INDACHI').maxAllowedPercent, 12);
+  // Lenovo has tighter limits
+  assert.equal(getSuggestedDiscount(5, 'LENOVO').maxAllowedPercent, 5);
+  // Brand without its own rules → "all other brands"
+  assert.equal(getSuggestedDiscount(2, 'PROCORE').maxAllowedPercent, 5);
+  assert.equal(getSuggestedDiscount(12, 'PROCORE').suggestedPercent, 3);
+  assert.equal(getSuggestedDiscount(12, '').suggestedPercent, 3);
 });
 
 test('validateMarginSafety protects against selling below COGS + threshold', () => {

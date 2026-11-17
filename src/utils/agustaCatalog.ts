@@ -70,6 +70,12 @@ export function parseInertiaPage(html: string): { component: string; props: Reco
   }
 }
 
+/** "Merek: Procore; Tipe: …" → "PROCORE". Empty when the specs name no brand. */
+export function brandFromSpecs(specs: string | undefined): string {
+  const m = (specs ?? '').match(/merek\s*:\s*([^;]+)/i);
+  return m ? m[1]!.trim().replace(/\s+/g, ' ').toUpperCase() : '';
+}
+
 export function specsToText(specs: unknown, max = 600): string {
   if (!specs || typeof specs !== 'object') return '';
   return Object.entries(specs as Record<string, unknown>)

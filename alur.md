@@ -9,6 +9,16 @@ Portal internal Agusta untuk menyusun **surat penawaran harga**. Sales menyusun 
 
 ## 0. Perubahan terbaru
 
+### 17 Nov 2026 — Revisi Tahap 2
+| Untuk | Perubahan |
+|---|---|
+| Sales | Form barang custom: **Pagu / anggaran** (total) menggantikan target harga per unit. |
+| Sales & Sales Support | **Saran & batas diskon per merek** produk (bukan per segmen). Segmen customer hanya untuk info & laporan. |
+| Sales & Sales Support | **Biaya tambahan**: jasa pasang, ongkos kirim, biaya lain. Kena PPN, tidak kena diskon, tercetak di PDF. |
+| Sales Support → Management | **Teruskan ke Management** untuk diskon di luar standar atau harga custom khusus. Management mengubah/menyetujui harga atau mengembalikan dengan catatan; Sales Support lalu menerbitkan PDF final. |
+| Sales & Sales Support | **Buat revisi** penawaran yang sudah jadi → versi baru `-R1`, `-R2`; versi lama jadi arsip (PDF lama tetap ada). |
+| Sales Support | Halaman **Aturan diskon per merek**; merek produk bisa diedit di Katalog. |
+
 ### 17 Nov 2026 — Revisi Tahap 1 (live)
 | Untuk | Perubahan |
 |---|---|
@@ -19,7 +29,7 @@ Portal internal Agusta untuk menyusun **surat penawaran harga**. Sales menyusun 
 | Sales Support | **Tampilan di PDF:** centang *Tampilkan PPN* dan *Tampilkan diskon* per penawaran. Tanpa PPN → tertulis “Total (belum termasuk PPN)” dan pesan WhatsApp memakai total sebelum PPN. Tanpa diskon → harga satuan langsung harga setelah diskon. |
 | Management | Laporan margin punya kelompok **Tanpa segmen**. |
 
-Berikutnya (Tahap 2): pagu/anggaran di barang custom, aturan diskon per merek, eskalasi ke Management, biaya tambahan, revisi penawaran yang sudah jadi. Detail & status: [revisi.md](revisi.md).
+Berikutnya (Tahap 3): update perkembangan penawaran mingguan oleh Sales, analisis success rate dan lama penawaran untuk Management. Detail & status: [revisi.md](revisi.md).
 
 ---
 
@@ -166,7 +176,7 @@ Panduan setup teknis lengkap: [docs/backend-setup.md](docs/backend-setup.md).
 |---|---|---|
 | Riset harga pasar (Serper.dev) | ✅ **Aktif** | Kuota gratis 2.500 kredit (±1.250 pencarian). Paket Starter $50 = 50.000 kredit, berlaku 6 bulan |
 | Katalog agusta.co.id | ✅ **Aktif** | — |
-| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 5 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel |
+| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 6 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel |
 | WhatsApp Business (Meta) | ⏳ Simulasi | Akun Meta Business terverifikasi, nomor pengirim, 2 template pesan disetujui Meta, token |
 | Sinkron katalog otomatis harian | ⏳ Belum dibuat | Bisa ditambahkan setelah Supabase aktif (saat ini lewat tombol) |
 

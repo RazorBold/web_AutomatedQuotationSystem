@@ -1,30 +1,32 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { errorMessage, useStore } from '../store/AppStore';
-import type { CustomerCategory } from '../types';
 import { Button, Field, Input, PageHeader, Panel, Select } from '../components/ui';
-import { DEFAULT_DISCOUNT_RULES, DiscountRule, getSuggestedDiscount } from '../utils/quotationEngine';
+import { DEFAULT_DISCOUNT_RULES, DiscountRule, getSuggestedDiscount, normalizeBrand } from '../utils/quotationEngine';
 
-const SEGMENT_LABEL: Record<CustomerCategory, string> = {
-  CORPORATE: 'Korporasi',
-  BUMN_GOV: 'BUMN / Pemerintah',
-  EDUCATION: 'Pendidikan',
-  RETAIL: 'Retail',
-};
-const SEGMENTS = Object.keys(SEGMENT_LABEL) as CustomerCategory[];
+const CELL =
+  'h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-right text-[13px] tabular-nums focus:border-link focus:outline-none focus:ring-3 focus:ring-link/15';
+const OTHER = 'Semua merek lain';
 
-const CELL = 'h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-right text-[13px] tabular-nums focus:border-link focus:outline-none focus:ring-3 focus:ring-link/15';
-
+/** Discount rules per brand (merek) and quantity tier (R12). */
 export function DiscountRulesPage() {
-  const { discountRules, setDiscountRules, notify } = useStore();
+  const { discountRules, setDiscountRules, notify, products } = useStore();
   const [draft, setDraft] = useState<DiscountRule[]>(discountRules);
-  const [simSegment, setSimSegment] = useState<CustomerCategory>('CORPORATE');
-  const [simQty, setSimQty] = useState(25);
+  const [simBrand, setSimBrand] = useState('');
+  const [simQty, setSimQty] = useState(10);
+
+  /** Brands known from the catalog, for suggestions and the simulator. */
+  const catalogBrands = useMemo(
+    () => Array.from(new Set(products.map(p => normalizeBrand(p.brand)).filter(Boolean))).sort(),
+    [products]
+  );
+  const ruleBrands = Array.from(new Set(draft.map(r => normalizeBrand(r.brand)).filter(Boolean))).sort();
+  const simOptions = Array.from(new Set([...ruleBrands, ...catalogBrands]));
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(discountRules);
   const sorted = draft
-    .map((r, i) => ({ r, i }))
-    .sort((a, b) => SEGMENTS.indexOf(a.r.customerCategory ?? 'CORPORATE') - SEGMENTS.indexOf(b.r.customerCategory ?? 'CORPORATE') || a.r.minQty - b.r.minQty);
+    .map((r, i) => ({ r, i, b: normalizeBrand(r.brand) }))
+    .sort((a, b) => (a.b === '' ? 1 : 0) - (b.b === '' ? 1 : 0) || a.b.localeCompare(b.b) || a.r.minQty - b.r.minQty);
 
   const patch = (i: number, p: Partial<DiscountRule>) => setDraft(d => d.map((r, idx) => (idx === i ? { ...r, ...p } : r)));
   const n = (v: string) => Math.max(0, Number(v.replace(',', '.')) || 0);
@@ -37,13 +39,14 @@ export function DiscountRulesPage() {
     })
     .filter(Boolean) as { i: number; msg: string }[];
 
-  const sim = getSuggestedDiscount(simQty, simSegment, draft);
+  const sim = getSuggestedDiscount(simQty, simBrand, draft);
+  const simUsesOwn = simBrand !== '' && ruleBrands.includes(normalizeBrand(simBrand));
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Aturan diskon"
-        description="Saran diskon yang muncul otomatis saat Sales menyusun penawaran, berdasarkan segmen customer dan jumlah barang. Diskon di atas batas maksimum perlu persetujuan khusus."
+        description="Saran dan batas diskon per merek dan jumlah barang. Muncul otomatis saat Sales menyusun penawaran. Diskon di atas batas maksimum sebaiknya diteruskan ke Management."
         actions={
           <>
             <Button variant="ghost" onClick={() => setDraft(DEFAULT_DISCOUNT_RULES)}>
@@ -53,7 +56,7 @@ export function DiscountRulesPage() {
               variant="primary"
               disabled={!dirty || problems.length > 0}
               onClick={() => {
-                setDiscountRules(draft)
+                setDiscountRules(draft.map(r => ({ ...r, brand: normalizeBrand(r.brand) || undefined })))
                   .then(() => notify('Aturan diskon disimpan. Berlaku untuk penawaran berikutnya.'))
                   .catch(e => notify(errorMessage(e), 'error'));
               }}
@@ -66,10 +69,15 @@ export function DiscountRulesPage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Panel bodyClassName="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-[13px]">
+          <datalist id="brand-options">
+            {catalogBrands.map(b => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
+          <table className="w-full min-w-[760px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-line text-xs text-ink-3">
-                <th className="px-5 py-3 font-medium">Segmen</th>
+                <th className="px-5 py-3 font-medium">Merek</th>
                 <th className="w-24 px-2 py-3 text-right font-medium">Qty min.</th>
                 <th className="w-24 px-2 py-3 text-right font-medium">Qty maks.</th>
                 <th className="w-28 px-2 py-3 text-right font-medium">Saran diskon %</th>
@@ -85,18 +93,14 @@ export function DiscountRulesPage() {
                   <React.Fragment key={i}>
                     <tr className={problem ? 'bg-brand-soft/40' : undefined}>
                       <td className="px-5 py-2">
-                        <Select
-                          aria-label="Segmen"
-                          value={r.customerCategory ?? 'CORPORATE'}
-                          onChange={e => patch(i, { customerCategory: e.target.value as CustomerCategory })}
-                          className="h-9 text-[13px]"
-                        >
-                          {SEGMENTS.map(s => (
-                            <option key={s} value={s}>
-                              {SEGMENT_LABEL[s]}
-                            </option>
-                          ))}
-                        </Select>
+                        <input
+                          aria-label="Merek"
+                          list="brand-options"
+                          value={r.brand ?? ''}
+                          placeholder={OTHER}
+                          onChange={e => patch(i, { brand: e.target.value.toUpperCase() || undefined })}
+                          className="h-9 w-full min-w-40 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] font-medium uppercase placeholder:normal-case placeholder:font-normal placeholder:text-ink-3 focus:border-link focus:outline-none focus:ring-3 focus:ring-link/15"
+                        />
                       </td>
                       <td className="px-2 py-2">
                         <input aria-label="Qty minimum" className={CELL} value={r.minQty} onChange={e => patch(i, { minQty: n(e.target.value) })} />
@@ -141,26 +145,28 @@ export function DiscountRulesPage() {
               })}
             </tbody>
           </table>
-          <div className="border-t border-line px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3">
             <Button
               size="sm"
               variant="ghost"
               icon={<Plus className="size-4" />}
-              onClick={() => setDraft(d => [...d, { minQty: 1, customerCategory: 'CORPORATE', suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 15 }])}
+              onClick={() => setDraft(d => [...d, { brand: '', minQty: 1, suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 15 }])}
             >
               Tambah aturan
             </Button>
+            <p className="text-xs text-ink-3">Merek kosong = berlaku untuk {OTHER.toLowerCase()} yang tidak punya aturan sendiri.</p>
           </div>
         </Panel>
 
-        <Panel title="Coba aturan" description="Lihat saran diskon untuk kombinasi segmen dan jumlah tertentu." className="self-start">
+        <Panel title="Coba aturan" description="Lihat saran diskon untuk merek dan jumlah tertentu." className="self-start">
           <div className="flex flex-col gap-4">
-            <Field label="Segmen customer">
+            <Field label="Merek">
               {p => (
-                <Select {...p} value={simSegment} onChange={e => setSimSegment(e.target.value as CustomerCategory)}>
-                  {SEGMENTS.map(s => (
-                    <option key={s} value={s}>
-                      {SEGMENT_LABEL[s]}
+                <Select {...p} value={simBrand} onChange={e => setSimBrand(e.target.value)}>
+                  <option value="">{OTHER}</option>
+                  {simOptions.map(b => (
+                    <option key={b} value={b}>
+                      {b}
                     </option>
                   ))}
                 </Select>
@@ -182,6 +188,7 @@ export function DiscountRulesPage() {
               </div>
             ))}
           </dl>
+          {simBrand !== '' && !simUsesOwn && <p className="mt-3 text-xs text-ink-3">{simBrand} belum punya aturan sendiri, memakai aturan {OTHER.toLowerCase()}.</p>}
           {dirty && <p className="mt-3 text-xs text-amber-700">Memakai perubahan yang belum disimpan.</p>}
         </Panel>
       </div>

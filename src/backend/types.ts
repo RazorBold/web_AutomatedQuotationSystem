@@ -1,4 +1,4 @@
-import type { AppNotification, CustomProductRequest, CustomerInfo, Product, Quotation, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, CustomProductRequest, CustomerInfo, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
@@ -22,18 +22,25 @@ export interface NewQuotationInput {
   salesNotes: string;
   /** Quotation-level discount in rupiah (diskon tambahan). */
   extraDiscount?: number;
+  /** Additional charges (jasa pasang, ongkir, lainnya). */
+  charges?: ChargeInput[];
 }
 
-/** Quotation-level settings Sales Support can change while reviewing. */
+export type ChargeInput = Omit<QuotationCharge, 'id'>;
+
+/** Quotation-level settings Sales Support (or Management, while escalated) can change. */
 export interface QuotationAdjustments {
   extraDiscount?: number;
   showTax?: boolean;
   showDiscount?: boolean;
+  charges?: ChargeInput[];
 }
+
+export type EscalationDecision = 'APPROVED' | 'RETURNED';
 
 export type NewCustomRequestInput = Pick<
   CustomProductRequest,
-  'productName' | 'category' | 'estimatedQty' | 'targetPricePerUnit' | 'specs' | 'referenceUrlOrNotes' | 'imageUrl' | 'sourceUrl'
+  'productName' | 'category' | 'estimatedQty' | 'targetPricePerUnit' | 'budgetTotal' | 'specs' | 'referenceUrlOrNotes' | 'imageUrl' | 'sourceUrl'
 >;
 
 export type CustomRequestPricing = Pick<CustomProductRequest, 'assignedCogs' | 'assignedSellingPrice' | 'supportNotes' | 'status'>;
@@ -69,7 +76,16 @@ export interface Backend {
   submitCustomRequest(actor: UserProfile, req: NewCustomRequestInput): Promise<void>;
   priceCustomRequest(actor: UserProfile, id: string, patch: CustomRequestPricing): Promise<void>;
   setDiscountRules(actor: UserProfile, rules: DiscountRule[]): Promise<void>;
-  updateProduct(actor: UserProfile, id: string, patch: Partial<Pick<Product, 'cogs' | 'basePrice' | 'stock'>>): Promise<void>;
+  updateProduct(actor: UserProfile, id: string, patch: Partial<Pick<Product, 'cogs' | 'basePrice' | 'stock' | 'brand'>>): Promise<void>;
+
+  /** R7: Sales Support forwards a quotation to Management (saving the current pricing first). */
+  escalateQuotation(actor: UserProfile, id: string, note: string, items: QuotationItemData[], supportNotes?: string, adjustments?: QuotationAdjustments): Promise<void>;
+  /** R7: Management approves (possibly with edited pricing) or returns; back to Sales Support. */
+  decideQuotationEscalation(actor: UserProfile, id: string, decision: EscalationDecision, note: string, items: QuotationItemData[], adjustments?: QuotationAdjustments): Promise<void>;
+  escalateCustomRequest(actor: UserProfile, id: string, note: string, cogs: number, sellingPrice: number): Promise<void>;
+  decideCustomRequestEscalation(actor: UserProfile, id: string, decision: EscalationDecision, note: string, cogs: number, sellingPrice: number): Promise<void>;
+  /** R5: new version (-R1, -R2 …) of an issued quotation; returns its id. */
+  createQuotationRevision(actor: UserProfile, id: string): Promise<string>;
 
   addUser(actor: UserProfile, input: NewUserInput): Promise<Result>;
   updateUser(actor: UserProfile, id: string, patch: UserPatch): Promise<Result>;

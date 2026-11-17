@@ -21,11 +21,36 @@ test('extra discount comes off the items before PPN and lowers the margin', () =
   assert.equal(calculateQuotationTotals(items, true, 11, 99_000_000).subtotal, 0);
 });
 
-test('without a customer segment there is no automatic discount suggestion', () => {
-  const s = getSuggestedDiscount(25, undefined);
-  assert.equal(s.suggestedPercent, 0);
-  assert.equal(s.maxAllowedPercent, 5);
-  assert.equal(getSuggestedDiscount(25, 'CORPORATE').suggestedPercent, 8);
+test('discount suggestion depends on brand, not on customer segment', () => {
+  assert.equal(getSuggestedDiscount(25, 'INDACHI').suggestedPercent, 5);
+  assert.equal(getSuggestedDiscount(25, undefined).suggestedPercent, 3); // other brands, 10+ units
+});
+
+test('additional charges: taxed, not discounted, excluded from margin', () => {
+  const t = calculateQuotationTotals(items, true, 11, 1_250_000, 500_000);
+  assert.equal(t.goodsSubtotal, 27_000_000);
+  assert.equal(t.chargesTotal, 500_000);
+  assert.equal(t.subtotal, 27_500_000);
+  assert.equal(t.taxAmount, 3_025_000);
+  assert.equal(t.grossProfit, 27_000_000 - 18_000_000);
+  assert.equal(t.grossMarginPercent, Number(((9_000_000 / 27_000_000) * 100).toFixed(2)));
+});
+
+test('document lists charges between the items and the subtotal', () => {
+  const t = calculateQuotationTotals(items, true, 11, 0, 750_000);
+  const v = documentView(
+    base({
+      charges: [
+        { id: 'c1', kind: 'INSTALL', label: 'Jasa pasang 10 unit', amount: 500_000 },
+        { id: 'c2', kind: 'SHIPPING', label: 'Ongkir ke Bandung', amount: 250_000 },
+      ],
+      subtotal: t.subtotal,
+      taxAmount: t.taxAmount,
+      grandTotal: t.grandTotal,
+    })
+  );
+  assert.deepEqual(v.totals.map(r => r.label), ['Total item', 'Jasa pasang 10 unit', 'Ongkir ke Bandung', 'Subtotal', 'PPN 11%', 'Total']);
+  assert.equal(v.totals[0]!.value.replace(/\s/g, ' '), 'Rp 28.250.000');
 });
 
 const base = (over: Partial<Quotation> = {}): Quotation => {

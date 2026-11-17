@@ -24,25 +24,37 @@ export interface QuotationItem {
 
 export type CustomerCategory = 'BUMN_GOV' | 'CORPORATE' | 'EDUCATION' | 'RETAIL';
 
+/**
+ * Discount rule per brand (merek) and quantity tier. A rule without `brand` applies to every brand
+ * that has no rule of its own ("Semua merek lain").
+ */
 export interface DiscountRule {
   minQty: number;
   maxQty?: number;
-  customerCategory?: CustomerCategory;
+  /** Brand name, matched case-insensitively. Empty = all other brands. */
+  brand?: string;
   suggestedDiscount: number; // Percentage
-  maxAllowedDiscount: number; // Maximum limit before requiring Director approval
+  maxAllowedDiscount: number; // Above this, Sales Support should escalate to Management
   minMarginPercent: number; // Safety floor
 }
 
+/** Placeholder figures until Agusta sends the real per-brand rules (revisi.md Q12). */
 export const DEFAULT_DISCOUNT_RULES: DiscountRule[] = [
-  { minQty: 1, maxQty: 4, customerCategory: 'RETAIL', suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
-  { minQty: 1, maxQty: 4, customerCategory: 'CORPORATE', suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
-  { minQty: 1, maxQty: 9, customerCategory: 'EDUCATION', suggestedDiscount: 3, maxAllowedDiscount: 7, minMarginPercent: 18 },
-  { minQty: 5, maxQty: 19, customerCategory: 'CORPORATE', suggestedDiscount: 5, maxAllowedDiscount: 10, minMarginPercent: 18 },
-  { minQty: 20, maxQty: 49, customerCategory: 'CORPORATE', suggestedDiscount: 8, maxAllowedDiscount: 12, minMarginPercent: 15 },
-  { minQty: 50, customerCategory: 'CORPORATE', suggestedDiscount: 10, maxAllowedDiscount: 15, minMarginPercent: 12 },
-  { minQty: 1, customerCategory: 'BUMN_GOV', suggestedDiscount: 5, maxAllowedDiscount: 12, minMarginPercent: 15 },
-  { minQty: 10, customerCategory: 'EDUCATION', suggestedDiscount: 7, maxAllowedDiscount: 12, minMarginPercent: 15 },
+  { brand: 'INDACHI', minQty: 1, maxQty: 9, suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
+  { brand: 'INDACHI', minQty: 10, maxQty: 49, suggestedDiscount: 5, maxAllowedDiscount: 10, minMarginPercent: 18 },
+  { brand: 'INDACHI', minQty: 50, suggestedDiscount: 8, maxAllowedDiscount: 12, minMarginPercent: 15 },
+  { brand: 'LENOVO', minQty: 1, maxQty: 4, suggestedDiscount: 0, maxAllowedDiscount: 3, minMarginPercent: 12 },
+  { brand: 'LENOVO', minQty: 5, suggestedDiscount: 3, maxAllowedDiscount: 5, minMarginPercent: 10 },
+  { brand: 'ASUS', minQty: 1, suggestedDiscount: 2, maxAllowedDiscount: 5, minMarginPercent: 10 },
+  { brand: 'ACER', minQty: 1, suggestedDiscount: 2, maxAllowedDiscount: 5, minMarginPercent: 10 },
+  { brand: 'AGUSTA', minQty: 1, maxQty: 4, suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
+  { brand: 'AGUSTA', minQty: 5, suggestedDiscount: 5, maxAllowedDiscount: 10, minMarginPercent: 18 },
+  { minQty: 1, maxQty: 9, suggestedDiscount: 0, maxAllowedDiscount: 5, minMarginPercent: 20 },
+  { minQty: 10, suggestedDiscount: 3, maxAllowedDiscount: 8, minMarginPercent: 15 },
 ];
+
+/** "Indachi " / "indachi" → "INDACHI". */
+export const normalizeBrand = (b: string | null | undefined) => (b ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
 
 /**
  * Calculate line item subtotal after discount
@@ -58,15 +70,18 @@ export function calculateLineSubtotal(item: Pick<QuotationItem, 'qty' | 'selling
 /**
  * Calculate total quotation financials including PPN (11% Indonesia VAT).
  *
- * `extraDiscount` is a quotation-level discount in rupiah (diskon tambahan), taken off the sum of
- * the item lines before PPN. `subtotal` is the amount after every discount; `itemsTotal` is before
- * the extra discount.
+ * - `extraDiscount`: quotation-level discount in rupiah (diskon tambahan), taken off the item lines.
+ * - `chargesTotal`: additional charges (jasa pasang, ongkir, …). Subject to PPN, not discounted,
+ *   and passed through at cost, so they are excluded from margin.
+ *
+ * `subtotal` = items − extra discount + charges (the PPN base). Margin is computed on the goods only.
  */
 export function calculateQuotationTotals(
   items: QuotationItem[],
   includeTax: boolean = true,
   taxRatePercent: number = 11,
-  extraDiscount: number = 0
+  extraDiscount: number = 0,
+  chargesTotal: number = 0
 ) {
   let itemsTotal = 0;
   let totalCogs = 0;
@@ -80,16 +95,20 @@ export function calculateQuotationTotals(
   }
 
   const appliedExtraDiscount = Math.min(itemsTotal, Math.max(0, Math.round(extraDiscount || 0)));
-  const subtotal = itemsTotal - appliedExtraDiscount;
+  const goodsSubtotal = itemsTotal - appliedExtraDiscount;
+  const charges = Math.max(0, Math.round(chargesTotal || 0));
+  const subtotal = goodsSubtotal + charges;
   const taxAmount = includeTax ? Math.round((subtotal * taxRatePercent) / 100) : 0;
   const grandTotal = subtotal + taxAmount;
-  const grossProfit = subtotal - totalCogs;
-  const grossMarginPercent = subtotal > 0 ? Number(((grossProfit / subtotal) * 100).toFixed(2)) : 0;
-  const totalDiscountAmount = totalGrossBase - subtotal;
+  const grossProfit = goodsSubtotal - totalCogs;
+  const grossMarginPercent = goodsSubtotal > 0 ? Number(((grossProfit / goodsSubtotal) * 100).toFixed(2)) : 0;
+  const totalDiscountAmount = totalGrossBase - goodsSubtotal;
 
   return {
     itemsTotal,
     extraDiscount: appliedExtraDiscount,
+    goodsSubtotal,
+    chargesTotal: charges,
     subtotal,
     taxRatePercent: includeTax ? taxRatePercent : 0,
     taxAmount,
@@ -102,16 +121,16 @@ export function calculateQuotationTotals(
   };
 }
 
-/** Used when no rule applies, e.g. the customer segment was left empty: no automatic discount. */
+/** Used when no rule applies at all. */
 export const FALLBACK_DISCOUNT = { suggestedPercent: 0, maxAllowedPercent: 5, minMarginPercent: 20 } as const;
 
 /**
- * Determine suggested discount based on quantity and customer segment.
- * Without a segment there is no automatic suggestion (the rep sets the discount).
+ * Suggested and maximum discount for an item, by its brand and quantity.
+ * Brand-specific rules win; otherwise the "all other brands" rules (no brand) apply.
  */
 export function getSuggestedDiscount(
   qty: number,
-  category: CustomerCategory | null | undefined,
+  brand: string | null | undefined,
   rules: DiscountRule[] = DEFAULT_DISCOUNT_RULES
 ): {
   suggestedPercent: number;
@@ -121,16 +140,13 @@ export function getSuggestedDiscount(
   if (qty <= 0) {
     return { suggestedPercent: 0, maxAllowedPercent: 0, minMarginPercent: 20 };
   }
-  if (!category) return { ...FALLBACK_DISCOUNT };
-
   const inRange = (r: DiscountRule) => qty >= r.minQty && (r.maxQty === undefined || qty <= r.maxQty);
-  // Retail customers fall back to the corporate tiers when no retail rule matches.
-  const pick = (cat: CustomerCategory) =>
-    rules
-      .filter(r => r.customerCategory === cat && inRange(r))
-      .sort((a, b) => b.minQty - a.minQty)[0];
+  const b = normalizeBrand(brand);
+  const pick = (match: (r: DiscountRule) => boolean) =>
+    rules.filter(r => match(r) && inRange(r)).sort((x, y) => y.minQty - x.minQty)[0];
 
-  const rule = pick(category) ?? (category === 'RETAIL' ? pick('CORPORATE') : undefined);
+  const hasOwnRules = b !== '' && rules.some(r => normalizeBrand(r.brand) === b);
+  const rule = hasOwnRules ? pick(r => normalizeBrand(r.brand) === b) : pick(r => !normalizeBrand(r.brand));
   if (!rule) return { ...FALLBACK_DISCOUNT };
 
   return {

@@ -35,9 +35,11 @@ export function Shell({ route, navigate, children }: { route: Route; navigate: (
   if (!currentUser) return null;
 
   const has = (p: Permission) => can(currentUser, p);
-  const pendingReview = quotations.filter(q => q.status === 'PENDING_REVIEW').length;
-  const needsRevision = quotations.filter(q => q.salesId === currentUser.id && q.status === 'REJECTED').length;
-  const pendingPricing = customRequests.filter(r => r.status === 'PENDING_PRICING').length;
+  // Each role counts what waits for *them*: Management handles escalations (R7).
+  const isManagement = currentUser.role === 'MANAGEMENT';
+  const pendingReview = quotations.filter(q => q.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_REVIEW')).length;
+  const needsRevision = quotations.filter(q => q.salesId === currentUser.id && (q.status === 'REJECTED' || q.status === 'DRAFT')).length;
+  const pendingPricing = customRequests.filter(r => r.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_PRICING')).length;
 
   const groups: { label: string; items: NavItem[] }[] = [
     {

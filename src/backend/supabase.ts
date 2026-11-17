@@ -8,6 +8,7 @@ import type {
   AppNotification,
   CustomProductRequest,
   CustomerInfo,
+  Escalation,
   Product,
   Quotation,
   QuotationEvent,
@@ -133,6 +134,13 @@ function mapQuotation(r: Row): Quotation {
     extraDiscount: n(r.extra_discount),
     showTax: r.show_tax ?? true,
     showDiscount: r.show_discount ?? true,
+    charges: ((r.quotation_charges ?? []) as Row[])
+      .sort((a, b) => a.position - b.position)
+      .map(c => ({ id: c.id, kind: c.kind, label: c.label, amount: n(c.amount) })),
+    escalation: mapEscalation(r.escalation),
+    revisionOf: r.revision_of ?? undefined,
+    revisionNo: r.revision_no ?? 0,
+    revisedTo: r.revised_to ?? undefined,
     whatsAppStatus: r.whatsapp_status ?? undefined,
     history: ((r.history ?? []) as Row[]).map(
       (h): QuotationEvent => ({ at: fmt(h.at), by: h.by, label: h.label, note: h.note ?? undefined })
@@ -150,6 +158,8 @@ function mapRequest(r: Row): CustomProductRequest {
     category: r.category,
     estimatedQty: n(r.estimated_qty),
     targetPricePerUnit: n(r.target_price_per_unit),
+    budgetTotal: r.budget_total != null ? n(r.budget_total) : undefined,
+    escalation: mapEscalation(r.escalation),
     specs: r.specs ?? '',
     referenceUrlOrNotes: r.reference_url_or_notes ?? '',
     submittedAt: fmt(r.submitted_at),
@@ -181,11 +191,25 @@ function mapNotification(r: Row): AppNotification {
   };
 }
 
+function mapEscalation(e: Row | null | undefined): Escalation | undefined {
+  if (!e || !e.at) return undefined;
+  return {
+    note: e.note ?? '',
+    by: e.by ?? '',
+    byId: e.byId ?? undefined,
+    at: fmt(e.at),
+    decision: e.decision ?? undefined,
+    decisionNote: e.decisionNote ?? undefined,
+    decidedBy: e.decidedBy ?? undefined,
+    decidedAt: e.decidedAt ? fmt(e.decidedAt) : undefined,
+  };
+}
+
 function mapRule(r: Row): DiscountRule {
   return {
     minQty: n(r.min_qty),
     maxQty: r.max_qty ?? undefined,
-    customerCategory: (r.customer_category ?? undefined) as CustomerCategory | undefined,
+    brand: r.brand ?? undefined,
     suggestedDiscount: n(r.suggested_discount),
     maxAllowedDiscount: n(r.max_allowed_discount),
     minMarginPercent: n(r.min_margin_percent),
@@ -211,6 +235,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
 
   async function applyAdjustments(id: string, a: QuotationAdjustments | undefined) {
     if (!a) return;
+    if (a.charges) check(await sb.rpc('set_quotation_charges', { p_id: id, p_charges: a.charges }));
     check(
       await sb.rpc('set_quotation_adjustments', {
         p_id: id,
@@ -297,7 +322,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       const [users, products, quotations, requests, rules, notifications] = await Promise.all([
         sb.from('profiles').select('*').order('created_at'),
         sb.from('products').select('*, product_costs(cogs)').order('created_at'),
-        sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs))').order('created_at', { ascending: false }),
+        sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs)), quotation_charges(*)').order('created_at', { ascending: false }),
         sb.from('custom_requests').select('*, custom_request_costs(assigned_cogs, supplier_name, supplier_url, supplier_price)').order('submitted_at', { ascending: false }),
         sb.from('discount_rules').select('*').order('position'),
         sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
@@ -343,6 +368,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       if (input.extraDiscount !== undefined) {
         check(await sb.rpc('set_quotation_adjustments', { p_id: data as string, p_extra_discount: input.extraDiscount }));
       }
+      if (input.charges) check(await sb.rpc('set_quotation_charges', { p_id: data as string, p_charges: input.charges }));
       return data as string;
     },
 
@@ -381,6 +407,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
           p_reference: req.referenceUrlOrNotes,
           p_image_url: req.imageUrl ?? null,
           p_source_url: req.sourceUrl ?? null,
+          p_budget_total: req.budgetTotal ?? null,
         })
       );
     },
@@ -397,6 +424,37 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       );
     },
 
+    async escalateQuotation(_actor, id, note, items, supportNotes, adjustments) {
+      await applyAdjustments(id, adjustments);
+      check(await sb.rpc('escalate_quotation', { p_id: id, p_note: note, p_items: pricingPayload(items), p_support_notes: supportNotes ?? null }));
+    },
+
+    async decideQuotationEscalation(_actor, id, decision, note, items, adjustments) {
+      await applyAdjustments(id, adjustments);
+      check(await sb.rpc('decide_quotation_escalation', { p_id: id, p_decision: decision, p_note: note, p_items: pricingPayload(items) }));
+    },
+
+    async escalateCustomRequest(_actor, id, note, cogs, sellingPrice) {
+      check(await sb.rpc('escalate_custom_request', { p_id: id, p_note: note, p_cogs: cogs || null, p_selling_price: sellingPrice || null }));
+    },
+
+    async decideCustomRequestEscalation(_actor, id, decision, note, cogs, sellingPrice) {
+      check(
+        await sb.rpc('decide_custom_request_escalation', {
+          p_id: id,
+          p_decision: decision,
+          p_note: note,
+          p_cogs: cogs || null,
+          p_selling_price: sellingPrice || null,
+        })
+      );
+    },
+
+    async createQuotationRevision(_actor, id) {
+      const { data } = check(await sb.rpc('create_quotation_revision', { p_id: id }));
+      return data as string;
+    },
+
     async setDiscountRules(_actor, rules) {
       check(await sb.rpc('replace_discount_rules', { p_rules: rules }));
     },
@@ -408,6 +466,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
           p_cogs: patch.cogs ?? null,
           p_base_price: patch.basePrice ?? null,
           p_stock: patch.stock ?? null,
+          p_brand: patch.brand ?? null,
         })
       );
     },

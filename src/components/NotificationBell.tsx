@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCheck, FileCheck2, FileClock, FileX2, PackageCheck, PackagePlus, PackageX, Tags } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, FileCheck2, FileClock, FileX2, PackageCheck, PackagePlus, PackageX, ShieldCheck, ShieldQuestion, Tags } from 'lucide-react';
 import type { AppNotification, NotificationType } from '../types';
 import { useStore } from '../store/AppStore';
 import type { Route } from '../App';
@@ -14,6 +14,10 @@ const ICON: Record<NotificationType, { icon: React.ComponentType<{ className?: s
   CUSTOM_REQUEST_PRICED: { icon: Tags, tone: 'bg-blue-50 text-blue-700' },
   CUSTOM_REQUEST_APPROVED: { icon: PackageCheck, tone: 'bg-emerald-50 text-emerald-700' },
   CUSTOM_REQUEST_REJECTED: { icon: PackageX, tone: 'bg-red-50 text-red-700' },
+  QUOTATION_ESCALATED: { icon: ShieldQuestion, tone: 'bg-violet-50 text-violet-700' },
+  QUOTATION_MGMT_DECIDED: { icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
+  CUSTOM_REQUEST_ESCALATED: { icon: ShieldQuestion, tone: 'bg-violet-50 text-violet-700' },
+  CUSTOM_REQUEST_MGMT_DECIDED: { icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
 };
 
 function timeAgo(iso: string): string {

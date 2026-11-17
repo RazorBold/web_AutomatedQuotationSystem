@@ -191,7 +191,8 @@ export async function buildQuotationPdf(q: Quotation, director: Signer): Promise
 
   const row = (label: string, value: string, bold = false) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    doc.text(label, 130, y);
+    // Charge labels can be long ("Ongkir ke Bandung"): keep them left of the amount column.
+    doc.text((doc.splitTextToSize(label, 52) as string[])[0]!, L + 87, y);
     doc.text(value, R - 2, y, { align: 'right' });
     y += 6;
   };

@@ -20,6 +20,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
    3. `supabase/migrations/20261111000000_agusta_catalog.sql`: katalog diselaraskan dengan agusta.co.id (impor produk, foto & link di request, produk tanpa harga tidak bisa dipakai di penawaran).
    4. `supabase/migrations/20261112000000_supplier_research.sql`: acuan supplier dari riset harga pasar (hanya terlihat oleh Sales Support & Management).
    5. `supabase/migrations/20261117000000_quote_options.sql`: diskon tambahan (Rp) dan pengaturan tampil/sembunyikan PPN & diskon di PDF.
+   6. `supabase/migrations/20261118000000_tahap2_workflow.sql`: pagu/anggaran barang custom, aturan diskon per merek, biaya tambahan, eskalasi ke Management, revisi penawaran (-R1, -R2).
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`

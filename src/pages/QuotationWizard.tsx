@@ -3,6 +3,8 @@ import { Check, ChevronLeft, MessageSquarePlus, Minus, PackageSearch, Plus, Sear
 import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { SmartSuggestions } from '../components/SmartSuggestions';
 import { DiscountInput, RupiahInput } from '../components/DiscountInput';
+import { ChargesEditor, chargesTotal, cleanCharges } from '../components/ChargesEditor';
+import type { ChargeInput } from '../backend';
 import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
 import { AgustaWebResults } from '../components/AgustaWebResults';
 import { agustaImageUrl } from '../utils/agustaCatalog';
@@ -14,8 +16,8 @@ import { calculateLineSubtotal, formatRupiah, getSuggestedDiscount, smartProduct
 import type { Route } from '../App';
 
 const SEGMENTS: { value: CustomerCategory; label: string; hint: string }[] = [
-  { value: 'CORPORATE', label: 'Korporasi', hint: 'Diskon bertingkat sesuai volume' },
-  { value: 'BUMN_GOV', label: 'BUMN / Pemerintah', hint: 'Mengikuti e-Katalog LKPP' },
+  { value: 'CORPORATE', label: 'Korporasi', hint: 'Perusahaan swasta' },
+  { value: 'BUMN_GOV', label: 'BUMN / Pemerintah', hint: 'Instansi, e-Katalog LKPP' },
   { value: 'EDUCATION', label: 'Pendidikan', hint: 'Sekolah & universitas' },
   { value: 'RETAIL', label: 'Retail', hint: 'Pembelian satuan' },
 ];
@@ -40,7 +42,7 @@ const EMPTY_CUSTOMER: CustomerInfo = {
 
 /** "Tidak ditentukan" first: the segment is optional and only drives the automatic discount suggestion. */
 const SEGMENT_OPTIONS: { value?: CustomerCategory; label: string; hint: string }[] = [
-  { label: 'Tidak ditentukan', hint: 'Tanpa saran diskon otomatis, diskon diisi sendiri' },
+  { label: 'Tidak ditentukan', hint: 'Segmen hanya untuk informasi & laporan' },
   ...SEGMENTS,
 ];
 
@@ -67,6 +69,7 @@ export function QuotationWizard({
   });
   const [salesNotes, setSalesNotes] = useState(editing?.salesNotes ?? '');
   const [extraDiscount, setExtraDiscount] = useState(editing?.extraDiscount ?? 0);
+  const [charges, setCharges] = useState<ChargeInput[]>(() => (editing?.charges ?? []).map(({ id: _id, ...c }) => c));
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Semua');
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +78,8 @@ export function QuotationWizard({
   const results = smartProductSearch(products, query).filter(p => category === 'Semua' || p.category === category);
   const byId = (id: string) => products.find(p => p.id === id)!;
 
-  const suggest = (qty: number) => getSuggestedDiscount(qty, customer.category, discountRules);
+  /** Discount rules follow the product's brand (R12). */
+  const suggest = (qty: number, productId: string) => getSuggestedDiscount(qty, products.find(p => p.id === productId)?.brand, discountRules);
 
   const setLine = (productId: string, p: Partial<Line>) =>
     setLines(prev => prev.map(l => (l.productId === productId ? { ...l, ...p } : l)));
@@ -83,7 +87,7 @@ export function QuotationWizard({
   const addProduct = (productId: string, qty = 1) => {
     const existing = lines.find(l => l.productId === productId);
     if (existing) return changeQty(productId, existing.qty + qty);
-    setLines(prev => [...prev, { productId, qty, discountPercent: suggest(qty).suggestedPercent, notes: '' }]);
+    setLines(prev => [...prev, { productId, qty, discountPercent: suggest(qty, productId).suggestedPercent, notes: '' }]);
   };
 
   const [customDraft, setCustomDraft] = useState<CustomRequestDraft | null>(null);
@@ -111,7 +115,7 @@ export function QuotationWizard({
 
   const changeQty = (productId: string, qty: number) => {
     if (qty <= 0) return setLines(prev => prev.filter(l => l.productId !== productId));
-    const s = suggest(qty);
+    const s = suggest(qty, productId);
     setLines(prev =>
       prev.map(l => (l.productId === productId ? { ...l, qty, discountPercent: Math.max(l.discountPercent, s.suggestedPercent) } : l))
     );
@@ -123,7 +127,8 @@ export function QuotationWizard({
   });
   const itemsTotal = priced.reduce((s, x) => s + x.subtotal, 0);
   const appliedExtra = Math.min(itemsTotal, extraDiscount);
-  const subtotal = itemsTotal - appliedExtra;
+  const chargeSum = chargesTotal(cleanCharges(charges));
+  const subtotal = itemsTotal - appliedExtra + chargeSum;
   const tax = Math.round(subtotal * 0.11);
 
   const validateCustomer = () => {
@@ -152,6 +157,7 @@ export function QuotationWizard({
         customer,
         salesNotes,
         extraDiscount: appliedExtra,
+        charges: cleanCharges(charges),
         items: lines.map(l => ({ productId: l.productId, qty: l.qty, discountPercent: l.discountPercent, notes: l.notes })),
       },
       editing?.id
@@ -197,6 +203,7 @@ export function QuotationWizard({
           })),
           subtotal,
           extraDiscount: appliedExtra,
+          charges: cleanCharges(charges).map((c, i) => ({ ...c, id: `c${i}` })),
           taxRatePercent: 11,
           taxAmount: tax,
           grandTotal: subtotal + tax,
@@ -287,7 +294,7 @@ export function QuotationWizard({
             <legend className="text-[13px] font-semibold text-ink">
               Segmen customer <span className="font-normal text-ink-3">(opsional)</span>
             </legend>
-            <p className="mt-0.5 text-xs text-ink-3">Menentukan saran diskon otomatis.</p>
+            <p className="mt-0.5 text-xs text-ink-3">Untuk informasi &amp; laporan. Saran diskon mengikuti merek tiap produk.</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {SEGMENT_OPTIONS.map(s => {
                 const active = customer.category === s.value;
@@ -441,7 +448,7 @@ export function QuotationWizard({
               ) : (
                 <ul className="divide-y divide-line">
                   {priced.map(({ l, p, subtotal: st }) => {
-                    const s = suggest(l.qty);
+                    const s = suggest(l.qty, l.productId);
                     const over = l.discountPercent > s.maxAllowedPercent;
                     return (
                       <li key={p.id} className="px-5 py-4">
@@ -486,9 +493,7 @@ export function QuotationWizard({
                         <p className={cx('mt-1.5 text-xs', over ? 'text-amber-700' : 'text-ink-3')}>
                           {over
                             ? `Di atas batas ${s.maxAllowedPercent}%. Sales Support perlu menyetujui khusus.`
-                            : customer.category
-                              ? `Saran ${s.suggestedPercent}%, maks. ${s.maxAllowedPercent}% untuk ${l.qty} ${p.unit.toLowerCase()}.`
-                              : `Tanpa segmen: isi diskon sendiri, maks. ${s.maxAllowedPercent}% tanpa persetujuan khusus.`}
+                            : `Saran ${s.suggestedPercent}%, maks. ${s.maxAllowedPercent}% · merek ${p.brand || 'lain'}, ${l.qty} ${p.unit.toLowerCase()}.`}
                         </p>
                         <input
                           aria-label={`Catatan ${p.name}`}
@@ -516,9 +521,17 @@ export function QuotationWizard({
                     <RupiahInput label="Diskon tambahan untuk seluruh penawaran" value={extraDiscount} onChange={setExtraDiscount} max={itemsTotal} className="w-32" />
                   </dd>
                 </div>
-                {appliedExtra > 0 && (
+                <div className="border-t border-dashed border-line pt-2">
+                  <dt className="mb-1.5 text-ink-2">
+                    Biaya tambahan <span className="text-xs text-ink-3">(kena PPN, opsional)</span>
+                  </dt>
+                  <dd>
+                    <ChargesEditor charges={charges} onChange={setCharges} />
+                  </dd>
+                </div>
+                {(appliedExtra > 0 || chargeSum > 0) && (
                   <div className="flex justify-between">
-                    <dt className="text-ink-2">Subtotal setelah diskon</dt>
+                    <dt className="text-ink-2">Subtotal (sebelum PPN)</dt>
                     <dd className="tabular-nums">{formatRupiah(subtotal)}</dd>
                   </div>
                 )}

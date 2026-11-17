@@ -7,18 +7,22 @@ import { QuotationTable } from '../components/QuotationTable';
 import type { QuotationStatus } from '../types';
 import type { Route } from '../App';
 
-type Filter = 'ALL' | 'PENDING_REVIEW' | 'DONE' | 'REJECTED';
+type Filter = 'ALL' | 'PENDING_REVIEW' | 'PENDING_MANAGEMENT' | 'DONE' | 'REJECTED' | 'DRAFT' | 'REVISED';
 const matches = (f: Filter, s: QuotationStatus) =>
-  f === 'ALL' || (f === 'DONE' ? s === 'APPROVED' || s === 'PDF_SENT' : s === f);
+  f === 'ALL' ? s !== 'REVISED' : f === 'DONE' ? s === 'APPROVED' || s === 'PDF_SENT' : s === f;
 
 export function QuotationsPage({ navigate }: { navigate: (r: Route) => void }) {
   const { currentUser, quotations } = useStore();
   const isReviewer = can(currentUser, 'quotation:review');
-  const [filter, setFilter] = useState<Filter>(isReviewer ? 'PENDING_REVIEW' : 'ALL');
+  const isManagement = currentUser?.role === 'MANAGEMENT';
+  const [filter, setFilter] = useState<Filter>(isManagement ? 'PENDING_MANAGEMENT' : isReviewer ? 'PENDING_REVIEW' : 'ALL');
   const [query, setQuery] = useState('');
 
   const scoped = useMemo(
-    () => (can(currentUser, 'quotation:view-all') ? quotations : quotations.filter(q => q.salesId === currentUser?.id)),
+    () =>
+      can(currentUser, 'quotation:view-all')
+        ? quotations.filter(q => q.status !== 'DRAFT') // a Sales rep's unfinished revision stays private
+        : quotations.filter(q => q.salesId === currentUser?.id),
     [quotations, currentUser]
   );
   const list = scoped.filter(q => {
@@ -59,9 +63,14 @@ export function QuotationsPage({ navigate }: { navigate: (r: Route) => void }) {
               value={filter}
               onChange={setFilter}
               options={[
+                ...(isReviewer || count('PENDING_MANAGEMENT')
+                  ? [{ value: 'PENDING_MANAGEMENT' as Filter, label: 'Menunggu Management', count: count('PENDING_MANAGEMENT') }]
+                  : []),
                 { value: 'PENDING_REVIEW', label: 'Menunggu review', count: count('PENDING_REVIEW') },
                 { value: 'REJECTED', label: 'Perlu revisi', count: count('REJECTED') },
+                ...(!isReviewer && count('DRAFT') ? [{ value: 'DRAFT' as Filter, label: 'Draf revisi', count: count('DRAFT') }] : []),
                 { value: 'DONE', label: 'Disetujui', count: count('DONE') },
+                ...(count('REVISED') ? [{ value: 'REVISED' as Filter, label: 'Arsip revisi', count: count('REVISED') }] : []),
                 { value: 'ALL', label: 'Semua', count: count('ALL') },
               ]}
             />

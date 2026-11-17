@@ -114,7 +114,7 @@ async function seedCatalog() {
           position: i + 1,
           min_qty: r.minQty,
           max_qty: r.maxQty ?? null,
-          customer_category: r.customerCategory ?? null,
+          brand: r.brand ?? null,
           suggested_discount: r.suggestedDiscount,
           max_allowed_discount: r.maxAllowedDiscount,
           min_margin_percent: r.minMarginPercent,
