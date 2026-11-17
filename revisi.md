@@ -237,7 +237,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 
 | Tanggal | Revisi | Catatan |
 |---|---|---|
-| 17 Nov 2026 | R5, R6, R7, R11, R12 | **Tahap 2 selesai** (belum di-push). Memakai usulan default Q5, Q6, sisa Q7, Q11; **angka aturan diskon per merek masih sementara (Q12)**. Database: migrasi `20261118000000_tahap2_workflow.sql`. Diuji: 28 unit test, database (PGlite, termasuk regresi 5 migrasi sebelumnya), dan alur di browser dengan 3 role. |
+| 17 Nov 2026 | R5, R6, R7, R11, R12 | **Tahap 2 live di production** (commit `2341037`, Vercel *Ready*). Memakai usulan default Q5, Q6, sisa Q7, Q11; **angka aturan diskon per merek masih sementara (Q12)**. Database: migrasi `20261118000000_tahap2_workflow.sql`. Diuji: 28 unit test, database (PGlite, termasuk regresi 5 migrasi sebelumnya), dan alur di browser dengan 3 role. |
 | 17 Nov 2026 | R7, R11–R14 | **Masukan ke-2 dari Agusta:** alur eskalasi Management diperjelas (R7, Q7 sebagian terjawab); baru: pagu/anggaran (R11), aturan diskon per merek (R12), update mingguan Sales (R13), analisis success rate (R14). |
 | 17 Nov 2026 | R1–R4 | **Tahap 1 live di production** (commit `ed4d730`, Vercel *Ready*): https://agusta-quotation-portal.vercel.app |
 | 17 Nov 2026 | R1–R4 | **Tahap 1 selesai.** Memakai usulan default Q2–Q4 (mohon dikonfirmasi tim Agusta). Database: migrasi `20261117000000_quote_options.sql`. Diuji: unit test, database (PGlite), dan alur di browser. |
