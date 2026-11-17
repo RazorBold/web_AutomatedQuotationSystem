@@ -3,11 +3,18 @@
 Portal internal Agusta untuk menyusun **surat penawaran harga**. Sales menyusun penawaran, Sales Support mereview dan menetapkan harga final, lalu PDF resmi terbit dan dikirim ke WhatsApp Sales.
 
 - **Alamat:** https://agusta-quotation-portal.vercel.app
-- **Status per 17 Nov 2026:** semua fitur di bawah sudah live, termasuk revisi Tahap 1–3 dari Agusta (lihat [Perubahan terbaru](#0-perubahan-terbaru) dan [revisi.md](revisi.md)). Database pusat (Supabase) dan WhatsApp Business **belum dihubungkan** (lihat [Status integrasi](#7-status-integrasi)).
+- **Status per 18 Nov 2026:** semua fitur di bawah sudah live, termasuk revisi Tahap 1–4 dari Agusta (lihat [Perubahan terbaru](#0-perubahan-terbaru) dan [revisi.md](revisi.md)). Database pusat (Supabase) dan WhatsApp Business **belum dihubungkan** (lihat [Status integrasi](#7-status-integrasi)).
 
 ---
 
 ## 0. Perubahan terbaru
+
+### 18 Nov 2026 — Revisi Tahap 4
+| Untuk | Perubahan |
+|---|---|
+| Sales Support & Management | Menu baru **Supplier & HPP**. **Import price list supplier** (Excel, CSV, atau PDF berisi teks): baris dicocokkan ke produk lewat kode/SKU, pratinjau HPP lama → baru + margin, lalu simpan. Selisih besar tidak dicentang otomatis. |
+| Sales Support & Management | **Riwayat perubahan HPP**: setiap perubahan HPP (dari price list maupun manual di Katalog) tercatat dengan sumber, pengubah, dan waktunya. |
+| Sales Support | Riset harga barang custom punya tab **Website supplier**: mencari di daftar website supplier (diatur di menu Supplier & HPP), atau di seluruh web tanpa marketplace bila daftar kosong. |
 
 ### 17 Nov 2026 — Revisi Tahap 3
 | Untuk | Perubahan |
@@ -114,6 +121,14 @@ Untuk barang yang tidak ada di katalog:
 
 Bisa juga diisi manual (tombol buka Google Shopping/Tokopedia/Shopee/Bhinneka/Blibli di tab baru).
 
+Tab **Website supplier** di panel yang sama mencari barang di **website supplier/distributor** (daftar diatur di menu *Supplier & HPP*), terpisah dari marketplace. Hasil yang mencantumkan harga bisa langsung dipakai sebagai acuan; yang tidak mencantumkan harga tetap bisa dicatat sebagai supplier.
+
+### 3.3a Supplier & HPP
+- **Import price list supplier**: upload Excel (.xlsx), CSV, atau PDF berisi teks → sistem mencocokkan kode/SKU ke katalog → pratinjau HPP lama → baru, selisih %, dan margin di harga jual sekarang → centang yang mau disimpan → **Simpan**. Harga jual tidak ikut berubah.
+- **Riwayat perubahan HPP**: semua perubahan HPP, dari price list maupun manual.
+- **Website supplier**: daftar website yang dicari saat riset harga (maks. 15).
+- Hanya Sales Support & Management yang bisa membuka menu ini.
+
 ### 3.4 PDF penawaran
 Surat resmi A4 ber-kop Agusta: nomor `QTN-YYMMDD-NNNN`, data customer (telepon bila diisi), tabel item dengan **foto produk** dan spesifikasi, diskon, diskon tambahan, subtotal, PPN 11%, total, masa berlaku 14 hari, tanda tangan elektronik Sales & Direktur. HPP dan margin tidak pernah dicetak.
 
@@ -186,7 +201,7 @@ Panduan setup teknis lengkap: [docs/backend-setup.md](docs/backend-setup.md).
 |---|---|---|
 | Riset harga pasar (Serper.dev) | ✅ **Aktif** | Kuota gratis 2.500 kredit (±1.250 pencarian). Paket Starter $50 = 50.000 kredit, berlaku 6 bulan |
 | Katalog agusta.co.id | ✅ **Aktif** | — |
-| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 7 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel (termasuk `CRON_SECRET` untuk pengingat mingguan) |
+| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 8 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel (termasuk `CRON_SECRET` untuk pengingat mingguan) |
 | WhatsApp Business (Meta) | ⏳ Simulasi | Akun Meta Business terverifikasi, nomor pengirim, 2 template pesan disetujui Meta, token |
 | Sinkron katalog otomatis harian | ⏳ Belum dibuat | Bisa ditambahkan setelah Supabase aktif (saat ini lewat tombol) |
 

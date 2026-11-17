@@ -1,6 +1,7 @@
 import type { Product } from '../types';
 import { agustaImageUrl, brandFromSpecs, type AgustaProduct } from '../utils/agustaCatalog';
 import type { MarketSearchResult } from '../utils/marketResearch';
+import type { SupplierSearchResult } from '../utils/supplierSearch';
 
 type TokenGetter = () => Promise<string | null>;
 
@@ -20,6 +21,11 @@ export function agustaApi(token: TokenGetter = async () => null) {
     fetchAgustaPage: (page: number) =>
       getJson<{ products: AgustaProduct[]; page: number; lastPage: number; total: number }>(`/api/agusta-search?page=${page}`, token),
     searchMarket: (query: string) => getJson<MarketSearchResult>(`/api/market-search?q=${encodeURIComponent(query)}`, token),
+    searchSuppliers: (query: string, domains: string[]) =>
+      getJson<SupplierSearchResult>(
+        `/api/supplier-search?q=${encodeURIComponent(query)}&sites=${encodeURIComponent(domains.join(','))}`,
+        token
+      ),
   };
 }
 

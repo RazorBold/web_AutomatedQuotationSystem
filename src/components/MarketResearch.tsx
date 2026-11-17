@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Check, ExternalLink, Loader2, Search, Star, Store, X } from 'lucide-react';
+import { Check, ExternalLink, Globe, Loader2, Search, Star, Store, X } from 'lucide-react';
 import { useStore } from '../store/AppStore';
 import { formatRupiah } from '../utils/quotationEngine';
 import { marketLinks, type MarketOffer, type MarketSearchResult, type SupplierRef } from '../utils/marketResearch';
-import { Button, Field, Input, ProductImage, cx } from './ui';
+import type { SupplierHit, SupplierSearchResult } from '../utils/supplierSearch';
+import { Button, Field, Input, ProductImage, Segmented, cx } from './ui';
 
 const num = (v: string) => Number(v.replace(/[^\d]/g, '')) || 0;
 
@@ -23,28 +24,49 @@ export function MarketResearch({
   /** Called with the chosen offer's price so the HPP field can be filled. */
   onUseAsCost: (price: number) => void;
 }) {
-  const { searchMarket } = useStore();
+  const { searchMarket, searchSuppliers, supplierSites } = useStore();
   const [query, setQuery] = useState(defaultQuery);
+  const [source, setSource] = useState<'MARKET' | 'SUPPLIER'>('MARKET');
   const [result, setResult] = useState<MarketSearchResult | null>(null);
+  const [supResult, setSupResult] = useState<SupplierSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [manual, setManual] = useState<{ name: string; url: string; price: number } | null>(null);
 
-  const search = async () => {
+  const search = async (from = source) => {
     if (query.trim().length < 3) return setError('Tulis nama barang minimal 3 huruf.');
     setLoading(true);
     setError('');
     setShowAll(false);
     try {
-      const r = await searchMarket(query);
-      setResult(r);
-      if (r.mode === 'manual' && !manual) setManual({ name: '', url: '', price: 0 });
+      if (from === 'SUPPLIER') {
+        const r = await searchSuppliers(query);
+        setSupResult(r);
+        if (r.mode === 'manual' && !manual) setManual({ name: '', url: '', price: 0 });
+      } else {
+        const r = await searchMarket(query);
+        setResult(r);
+        if (r.mode === 'manual' && !manual) setManual({ name: '', url: '', price: 0 });
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const switchTo = (s: 'MARKET' | 'SUPPLIER') => {
+    setSource(s);
+    setError('');
+    // Search the other source for the same words right away, once (each search costs API credits).
+    const have = s === 'SUPPLIER' ? supResult : result;
+    if (query.trim().length >= 3 && (!have || have.query !== query.replace(/\s+/g, ' ').trim())) void search(s);
+  };
+
+  const chooseHit = (h: SupplierHit) => {
+    onSupplierChange({ name: h.supplier, url: h.url, price: h.price });
+    if (h.price > 0) onUseAsCost(h.price);
   };
 
   const choose = (o: MarketOffer) => {
@@ -54,12 +76,30 @@ export function MarketResearch({
 
   const offers = result?.offers ?? [];
   const visible = showAll ? offers : offers.slice(0, 6);
-  const links = result?.links ?? marketLinks(query || defaultQuery);
+  const q = encodeURIComponent((query || defaultQuery).trim());
+  const links =
+    source === 'SUPPLIER'
+      ? supplierSites.length
+        ? supplierSites.map(s => ({ label: s.name, url: `https://www.google.com/search?hl=id&q=${q}+site%3A${s.domain}` }))
+        : [{ label: 'Google', url: `https://www.google.com/search?hl=id&q=${q}+harga+supplier` }]
+      : (result?.links ?? marketLinks(query || defaultQuery));
 
   return (
     <section aria-label="Riset harga pasar" className="mt-6 rounded-xl border border-line p-4">
       <p className="text-sm font-semibold text-ink">Riset harga pasar</p>
-      <p className="mt-0.5 text-xs text-ink-2">Cari barang serupa di toko online sebagai acuan supplier dan HPP. Tidak terlihat oleh Sales.</p>
+      <p className="mt-0.5 text-xs text-ink-2">Cari barang serupa di toko online atau website supplier sebagai acuan supplier dan HPP. Tidak terlihat oleh Sales.</p>
+
+      <div className="mt-3">
+        <Segmented
+          label="Sumber riset harga"
+          value={source}
+          onChange={switchTo}
+          options={[
+            { value: 'MARKET', label: 'Marketplace' },
+            { value: 'SUPPLIER', label: 'Website supplier' },
+          ]}
+        />
+      </div>
 
       <form
         className="mt-3 flex gap-2"
@@ -100,7 +140,66 @@ export function MarketResearch({
         </div>
       )}
 
-      {result?.mode === 'live' && (
+      {source === 'SUPPLIER' && (
+        <div className="mt-4">
+          <p className="text-xs text-ink-3">
+            {supplierSites.length
+              ? `Mencari di ${supplierSites.length} website supplier: ${supplierSites.map(s => s.name).join(', ')}.`
+              : 'Daftar website supplier belum diatur (menu Supplier & HPP), jadi mencari di seluruh web tanpa marketplace.'}
+          </p>
+          {supResult?.mode === 'live' &&
+            (supResult.hits.length === 0 ? (
+              <p className="mt-2 text-[13px] text-ink-2">Tidak ada hasil untuk “{supResult.query}”. Coba kata kunci lain atau cek manual.</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-line">
+                {(showAll ? supResult.hits : supResult.hits.slice(0, 6)).map(h => {
+                  const chosen = supplier?.url === h.url;
+                  return (
+                    <li key={h.url} className="flex items-start gap-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <a href={h.url} target="_blank" rel="noreferrer noopener" className="line-clamp-2 text-[13px] font-medium leading-snug text-ink hover:text-link">
+                          {h.title}
+                        </a>
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-3">
+                          <Globe className="size-3 shrink-0" aria-hidden />
+                          <span className="truncate">
+                            {h.supplier}
+                            {h.supplier !== h.domain && ` · ${h.domain}`}
+                          </span>
+                        </p>
+                        {h.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-ink-2">{h.snippet}</p>}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className={cx('text-[13px] tabular-nums', h.price > 0 ? 'font-semibold text-ink' : 'text-ink-3')}>
+                          {h.price > 0 ? formatRupiah(h.price) : 'Harga tidak tercantum'}
+                        </span>
+                        <button
+                          onClick={() => chooseHit(h)}
+                          disabled={chosen}
+                          className={cx('text-xs font-semibold cursor-pointer disabled:cursor-default', chosen ? 'text-emerald-700' : 'text-link hover:text-link-strong')}
+                        >
+                          {chosen ? 'Dipakai' : 'Pakai sebagai acuan'}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ))}
+          {supResult?.mode === 'live' && supResult.hits.length > 6 && !showAll && (
+            <button onClick={() => setShowAll(true)} className="mt-1 text-xs font-medium text-link hover:text-link-strong cursor-pointer">
+              Tampilkan {supResult.hits.length - 6} hasil lainnya
+            </button>
+          )}
+          {supResult?.mode === 'manual' && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+              Pencarian otomatis belum aktif (API key Serper.dev belum diisi). Buka website supplier di bawah, lalu catat harganya.
+            </p>
+          )}
+        </div>
+      )}
+
+      {source === 'MARKET' && result?.mode === 'live' && (
         <div className="mt-4">
           {result.stats ? (
             <dl className="grid grid-cols-3 divide-x divide-line rounded-lg bg-canvas text-center">
@@ -169,7 +268,7 @@ export function MarketResearch({
         </div>
       )}
 
-      {result?.mode === 'manual' && (
+      {source === 'MARKET' && result?.mode === 'manual' && (
         <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
           Pencarian otomatis belum aktif (API key Serper.dev belum diisi). Buka pencarian di bawah, lalu catat toko dan harganya di sini.
         </p>

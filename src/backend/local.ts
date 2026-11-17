@@ -3,13 +3,14 @@
  * Behaviour matches the original prototype; WhatsApp is always simulated.
  */
 import { INITIAL_CUSTOM_REQUESTS, INITIAL_QUOTATIONS, PRODUCTS, USERS } from '../data/mockData';
-import type { AppNotification, FollowUp, NotificationType, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, FollowUp, NotificationType, PriceChange, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
 import { FOLLOWUP_INTERVAL_DAYS, needsFollowUp } from '../utils/analytics';
 import { can, type Permission } from '../auth/permissions';
 import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, generateQuotationNumber, normalizeBrand } from '../utils/quotationEngine';
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
 import type { Backend, ChargeInput, QuotationAdjustments, Snapshot } from './types';
 import { agustaApi, productFromAgusta, sameProduct } from './agustaApi';
+import { MAX_SITES, normalizeDomain, type SupplierSite } from '../utils/supplierSearch';
 
 const STORAGE_KEY = 'agusta-qs:v3';
 
@@ -70,6 +71,8 @@ const initialState = (): State => ({
   customRequests: INITIAL_CUSTOM_REQUESTS,
   discountRules: DEFAULT_DISCOUNT_RULES,
   notifications: [],
+  supplierSites: [],
+  priceHistory: [],
   sessionUserId: null,
 });
 
@@ -88,6 +91,8 @@ function read(): State {
       discountRules:
         p.discountRules && !p.discountRules.some(r => 'customerCategory' in (r as object)) ? p.discountRules : base.discountRules,
       notifications: p.notifications ?? [],
+      supplierSites: p.supplierSites ?? [],
+      priceHistory: p.priceHistory ?? [],
       sessionUserId: p.sessionUserId ?? null,
     };
   } catch {
@@ -179,6 +184,23 @@ export function createLocalBackend(): Backend {
     save();
   };
 
+  const priceChange = (actor: UserProfile, p: Product, cogs: number, source: PriceChange['source'], reference?: string): PriceChange => {
+    const at = new Date();
+    return {
+      id: `pc-${at.getTime()}-${p.id}`,
+      productId: p.id,
+      productName: p.name,
+      sku: p.sku,
+      oldCogs: p.cogs,
+      newCogs: cogs,
+      source,
+      reference,
+      by: actor.name,
+      at: now(),
+      atIso: at.toISOString(),
+    };
+  };
+
   const reviewers = () =>
     state.users.filter(u => u.status === 'ACTIVE' && (u.role === 'SALES_SUPPORT' || u.role === 'MANAGEMENT')).map(u => u.id);
   const qRef = (q: Quotation) => `${q.quotationNumber} · ${q.customer.companyName}`;
@@ -224,8 +246,15 @@ export function createLocalBackend(): Backend {
 
     async load() {
       remindFollowUps();
-      const { sessionUserId, notifications, ...snap } = state;
-      return { ...snap, notifications: notifications.filter(n => n.userId === sessionUserId) };
+      const { sessionUserId, notifications, supplierSites, priceHistory, ...snap } = state;
+      const me = state.users.find(u => u.id === sessionUserId);
+      const reviewer = can(me ?? null, 'cogs:edit');
+      return {
+        ...snap,
+        notifications: notifications.filter(n => n.userId === sessionUserId),
+        supplierSites: reviewer ? supplierSites : [],
+        priceHistory: reviewer ? priceHistory : [],
+      };
     },
 
     ...agustaApi(),
@@ -658,8 +687,50 @@ export function createLocalBackend(): Backend {
     async updateProduct(actor, id, patch) {
       require(actor, 'cogs:edit');
       const clean = patch.brand !== undefined ? { ...patch, brand: normalizeBrand(patch.brand) } : patch;
-      state = { ...state, products: state.products.map(p => (p.id === id ? { ...p, ...clean } : p)) };
+      const before = state.products.find(p => p.id === id);
+      const logged = before && patch.cogs !== undefined && patch.cogs !== before.cogs ? [priceChange(actor, before, patch.cogs, 'MANUAL')] : [];
+      state = {
+        ...state,
+        products: state.products.map(p => (p.id === id ? { ...p, ...clean } : p)),
+        priceHistory: [...logged, ...state.priceHistory].slice(0, 500),
+      };
       save();
+    },
+
+    async saveSupplierSites(actor, sites) {
+      require(actor, 'cogs:edit');
+      if (sites.length > MAX_SITES) throw new Error(`Maksimal ${MAX_SITES} website supplier.`);
+      const clean: SupplierSite[] = [];
+      for (const s of sites) {
+        const domain = normalizeDomain(s.domain);
+        if (!domain) throw new Error(`Alamat website tidak valid: ${s.domain}`);
+        if (!s.name.trim()) throw new Error(`Nama supplier untuk ${domain} wajib diisi.`);
+        if (!clean.some(c => c.domain === domain)) clean.push({ id: `site-${domain}`, name: s.name.trim().slice(0, 120), domain });
+      }
+      state = { ...state, supplierSites: clean };
+      save();
+    },
+
+    async applyPriceList(actor, reference, changes) {
+      require(actor, 'cogs:edit');
+      if (!changes.length) throw new Error('Tidak ada perubahan harga untuk disimpan.');
+      if (changes.length > 2000) throw new Error('Maksimal 2.000 produk per import.');
+      const ref = reference.trim().slice(0, 160) || 'Price list';
+      const logged: PriceChange[] = [];
+      const byId = new Map(changes.map(c => [c.productId, c.cogs]));
+      for (const c of changes) {
+        if (!(c.cogs > 0)) throw new Error(`HPP baru harus lebih dari 0 (produk ${c.productId}).`);
+        if (!state.products.some(p => p.id === c.productId)) throw new Error(`Produk ${c.productId} tidak ditemukan.`);
+      }
+      const products = state.products.map(p => {
+        const cogs = byId.get(p.id);
+        if (cogs === undefined || cogs === p.cogs) return p;
+        logged.push(priceChange(actor, p, cogs, 'IMPORT', ref));
+        return { ...p, cogs };
+      });
+      state = { ...state, products, priceHistory: [...logged, ...state.priceHistory].slice(0, 500) };
+      save();
+      return logged.length;
     },
 
     async addUser(actor, input) {

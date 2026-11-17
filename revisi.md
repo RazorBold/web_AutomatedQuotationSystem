@@ -5,7 +5,7 @@ Update file ini setiap ada progres (centang `[x]`, ubah status, isi kolom keputu
 
 **Legenda status:** ✅ Selesai · 🟡 Sebagian · 🔨 Dikerjakan · ⏳ Menunggu keputusan/data · ❌ Belum
 
-_Terakhir diperbarui: 17 Nov 2026 — Tahap 1, 2 & 3 selesai; berikutnya Tahap 4 (R10, R9, menunggu data supplier)_
+_Terakhir diperbarui: 18 Nov 2026 — Tahap 1–4 selesai; tinggal uji dengan data asli supplier (Q9, Q10) dan konfirmasi usulan default_
 
 ---
 
@@ -21,14 +21,14 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1, 2 & 3 selesai; berikutnya Tahap 4
 | R6 | Biaya tambahan jasa pasang & ongkir | Sales Support | ✅ Selesai | 2 | Konfirmasi Q6 (pakai usulan default) |
 | R7 | Eskalasi ke Management (diskon di luar standar & harga custom khusus) | Sales Support | ✅ Selesai | 2 | Konfirmasi sisa Q7 |
 | R8 | Analisa lama penawaran | Management | ✅ Selesai | 3 | Konfirmasi Q8 (pakai usulan default) |
-| R9 | Update harga dari PDF supplier ke master data | General | ❌ Belum | 4 | Data Q9 |
-| R10 | Produk custom dicari ke website supplier (selain e-commerce) | General | 🟡 Sebagian | 4 | Data Q10 |
+| R9 | Update harga dari PDF supplier ke master data | General | ✅ Selesai | 4 | **Uji dengan price list asli supplier (Q9)** |
+| R10 | Produk custom dicari ke website supplier (selain e-commerce) | General | ✅ Selesai | 4 | **Daftar website supplier dari Agusta (Q10)** |
 | R11 | "Target harga per unit" diganti **Pagu / anggaran** | Sales | ✅ Selesai | 2 | Konfirmasi Q11 (pakai usulan default) |
 | R12 | Aturan diskon **per merek** (bukan per segmen) | Sales Support | ✅ Selesai | 2 | **Angka diskon per merek dari Agusta (Q12)** — sekarang angka sementara |
 | R13 | Sales update perkembangan penawaran **seminggu sekali** | Sales | ✅ Selesai | 3 | Konfirmasi Q13 (pakai usulan default) |
 | R14 | Analisis **success rate** penawaran | Management | ✅ Selesai | 3 | Konfirmasi Q14 (pakai usulan default) |
 
-**Progres:** 12 dari 14 selesai (Tahap 1, 2 & 3). Sisa: R9 & R10 (Tahap 4).
+**Progres:** 14 dari 14 selesai (Tahap 1–4). Sisa: uji R9/R10 dengan data asli supplier, angka diskon per merek (Q12), dan konfirmasi usulan default.
 
 ---
 
@@ -137,23 +137,26 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1, 2 & 3 selesai; berikutnya Tahap 4
 - **Rencana:** **Import price list**: upload Excel/PDF supplier → sistem mencocokkan produk → pratinjau *harga lama → harga baru* → Sales Support konfirmasi → master data terupdate + tercatat riwayatnya.
 - **Catatan:** Excel dibaca akurat. PDF tiap supplier formatnya berbeda, perlu dibaca otomatis (bisa dibantu AI, ada biaya per dokumen), dan selalu lewat pratinjau sebelum disimpan.
 - **Butuh dari Agusta:** Q9
+- **Hasil:** menu **Supplier & HPP** (Sales Support & Management) → **Import price list supplier**: upload **Excel (.xlsx), CSV, atau PDF berisi teks**. Baris dicocokkan ke produk lewat **kode/SKU** (atau nama persis); kolom kode & harga dikenali otomatis dari judul kolom (mis. *Kode Barang*, *Part Number*, *Harga Net/Dealer*) dan bisa dipilih manual. Pratinjau *HPP lama → HPP baru*, selisih %, dan margin di harga jual sekarang; selisih > 50% atau HPP lama kosong **tidak dicentang otomatis**. Baris yang tidak dikenali ditampilkan. Setelah konfirmasi, HPP diperbarui dan **setiap perubahan HPP (import maupun manual di Katalog) tercatat di riwayat**. Sesuai usulan Q9: harga supplier = HPP, harga jual tetap manual.
+- **Batasan:** PDF hasil scan (gambar) tidak bisa dibaca; minta Excel/PDF asli. Pembacaan PDF memakai posisi teks (gratis), belum memakai AI; bila format PDF supplier tertentu sulit dibaca, bisa ditambah pembacaan berbantuan AI (ada biaya per dokumen).
 - **Langkah:**
-  - [ ] Pelajari contoh price list tiap supplier
-  - [ ] Import Excel/CSV + pencocokan produk
-  - [ ] Pembacaan PDF
-  - [ ] Layar pratinjau & konfirmasi
-  - [ ] Riwayat perubahan harga per produk
+  - [ ] Pelajari contoh price list tiap supplier (menunggu file dari Agusta)
+  - [x] Import Excel/CSV + pencocokan produk
+  - [x] Pembacaan PDF (PDF berisi teks)
+  - [x] Layar pratinjau & konfirmasi
+  - [x] Riwayat perubahan harga per produk
   - [ ] Uji dengan file asli supplier
 
 ### R10 — Produk custom dicari ke website supplier (selain e-commerce)
 - **Kondisi sekarang:** 🟡 Riset harga pasar memakai Google Shopping (marketplace). Website supplier hanya muncul bila kebetulan terdaftar di Google Shopping.
 - **Rencana:** di panel **Riset harga pasar**, tambah bagian **Website supplier** yang mencari langsung di daftar website supplier (pakai API key Serper yang sudah aktif), ditampilkan terpisah dari marketplace.
 - **Butuh dari Agusta:** Q10
+- **Hasil:** panel **Riset harga pasar** punya tab **Marketplace** dan **Website supplier**. Tab Website supplier mencari lewat Google (Serper, 1 kredit per pencarian) **hanya di daftar website supplier**; bila daftar masih kosong, mencari di seluruh web **tanpa marketplace** (Tokopedia, Shopee, Bukalapak, Blibli, Lazada, Bhinneka). Hasil menampilkan nama supplier, alamat web, cuplikan, dan harga bila tercantum ("Harga tidak tercantum" bila tidak). **Pakai sebagai acuan** mencatat supplier dan mengisi HPP bila ada harga. Daftar website (maks. 15) diatur di menu **Supplier & HPP**.
 - **Langkah:**
-  - [ ] Daftar website supplier di pengaturan (bisa diubah Sales Support/Management)
-  - [ ] Pencarian per website supplier
-  - [ ] Tampil terpisah di panel Riset harga pasar + "Pakai sebagai acuan"
-  - [ ] Uji dengan website supplier asli
+  - [x] Daftar website supplier di pengaturan (bisa diubah Sales Support/Management)
+  - [x] Pencarian per website supplier
+  - [x] Tampil terpisah di panel Riset harga pasar + "Pakai sebagai acuan"
+  - [ ] Uji dengan website supplier asli (menunggu daftar dari Agusta)
 
 ### R11 — "Target harga per unit" diganti Pagu / anggaran
 - **Kondisi sekarang:** form barang custom punya field *Target harga per unit (opsional)*.
@@ -231,7 +234,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 | **1. Perubahan cepat** | R1, R2, R4, R3 (tambahan) | Bisa langsung, pakai usulan default bila belum dijawab |
 | **2. Alur kerja penawaran** | R11 → R12 → R6 → R7 → R5 | R11/R12/R7 bisa dimulai dengan usulan default; R6 & R5 menunggu Q6 & Q5 |
 | **3. Tindak lanjut & laporan** | R13 → R14 → R8 | R13 bisa dimulai dengan usulan default Q13 |
-| **4. Integrasi supplier** | R10 → R9 | Data Q10 (daftar website) dan Q9 (contoh price list) |
+| **4. Integrasi supplier** | R10 → R9 | ✅ Fitur selesai; uji dengan data Q10 (daftar website) dan Q9 (contoh price list) |
 
 **Prasyarat penting:** R5, R7, R8, R13, dan R14 bisa dicoba di mode demo, tetapi baru benar-benar berguna setelah **database pusat (Supabase) dipasang**. Persetujuan Management dan analisa lama penawaran butuh data bersama, bukan data di browser masing-masing. Lihat [docs/backend-setup.md](docs/backend-setup.md).
 
@@ -241,6 +244,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 
 | Tanggal | Revisi | Catatan |
 |---|---|---|
+| 18 Nov 2026 | R9, R10 | **Tahap 4 selesai.** Menu baru *Supplier & HPP*: import price list (Excel/CSV/PDF teks) dengan pratinjau, riwayat perubahan HPP, daftar website supplier; tab *Website supplier* di riset harga. Database: migrasi `20261120000000_tahap4_supplier.sql`. Diuji: 40 unit test, database (PGlite, termasuk regresi 7 migrasi sebelumnya), dan alur di browser (CSV, Excel, PDF, pencarian supplier dengan layanan tiruan). **Masih perlu file price list & daftar website asli dari Agusta.** |
 | 17 Nov 2026 | R13, R14, R8 | **Tahap 3 live di production** (commit `911ee85`, Vercel *Ready*). Pengingat mingguan aktif setelah Supabase dipasang dan `CRON_SECRET` diisi. |
 | 17 Nov 2026 | R13, R14, R8 | **Tahap 3 selesai.** Memakai usulan default Q8, Q13, Q14 (mohon dikonfirmasi). Database: migrasi `20261119000000_tahap3_followup.sql`; env baru `CRON_SECRET` untuk pengingat mingguan. Diuji: 33 unit test, database (PGlite, termasuk regresi 6 migrasi sebelumnya), dan alur di browser (Sales update → Management lihat laporan). |
 | 17 Nov 2026 | R5, R6, R7, R11, R12 | **Tahap 2 live di production** (commit `2341037`, Vercel *Ready*). Memakai usulan default Q5, Q6, sisa Q7, Q11; **angka aturan diskon per merek masih sementara (Q12)**. Database: migrasi `20261118000000_tahap2_workflow.sql`. Diuji: 28 unit test, database (PGlite, termasuk regresi 5 migrasi sebelumnya), dan alur di browser dengan 3 role. |

@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { AppNotification, CustomProductRequest, Product, Quotation, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, CustomProductRequest, PriceChange, Product, Quotation, QuotationItemData, UserProfile } from '../types';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
 import type { MarketSearchResult, SupplierRef } from '../utils/marketResearch';
+import type { SupplierSearchResult, SupplierSite } from '../utils/supplierSearch';
 import { buildQuotationPdf, getDirector } from '../utils/quotationPdf';
 import { can } from '../auth/permissions';
 import {
@@ -15,6 +16,7 @@ import {
   type QuotationAdjustments,
   type EscalationDecision,
   type FollowUpInput,
+  type PriceListChange,
   type Result,
   type Snapshot,
   type UserPatch,
@@ -62,6 +64,8 @@ interface Store {
   customRequests: CustomProductRequest[];
   discountRules: DiscountRule[];
   notifications: AppNotification[];
+  supplierSites: SupplierSite[];
+  priceHistory: PriceChange[];
   unreadCount: number;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
 
@@ -69,6 +73,9 @@ interface Store {
   searchAgusta: (query: string) => Promise<AgustaProduct[]>;
   /** Comparable offers on the web (price, store, link) for a custom request. */
   searchMarket: (query: string) => Promise<MarketSearchResult>;
+  searchSuppliers: (query: string) => Promise<SupplierSearchResult>;
+  saveSupplierSites: (sites: Omit<SupplierSite, 'id'>[]) => Promise<void>;
+  applyPriceList: (reference: string, changes: PriceListChange[]) => Promise<number>;
   setCustomRequestSupplier: (id: string, supplier: SupplierRef | null) => Promise<void>;
   /** Imports the whole agusta.co.id catalog, one page at a time. */
   syncAgustaCatalog: (onProgress: (p: SyncProgress) => void, signal: AbortSignal) => Promise<SyncProgress>;
@@ -109,7 +116,16 @@ interface Store {
 
 const StoreContext = createContext<Store | null>(null);
 
-const EMPTY: Snapshot = { users: [], quotations: [], products: [], customRequests: [], discountRules: [], notifications: [] };
+const EMPTY: Snapshot = {
+  users: [],
+  quotations: [],
+  products: [],
+  customRequests: [],
+  discountRules: [],
+  notifications: [],
+  supplierSites: [],
+  priceHistory: [],
+};
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -326,6 +342,27 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const searchAgusta: Store['searchAgusta'] = q => backend.searchAgusta(q);
   const searchMarket: Store['searchMarket'] = q => backend.searchMarket(q);
+  // Supplier names come from our own list; the server only knows domains.
+  const searchSuppliers: Store['searchSuppliers'] = async q => {
+    const sites = snapRef.current.supplierSites;
+    const r = await backend.searchSuppliers(
+      q,
+      sites.map(s => s.domain)
+    );
+    return {
+      ...r,
+      hits: r.hits.map(h => ({ ...h, supplier: sites.find(s => h.domain === s.domain || h.domain.endsWith(`.${s.domain}`))?.name ?? h.supplier })),
+    };
+  };
+  const saveSupplierSites: Store['saveSupplierSites'] = async sites => {
+    await backend.saveSupplierSites(actor(), sites);
+    await refresh();
+  };
+  const applyPriceList: Store['applyPriceList'] = async (reference, changes) => {
+    const n = await backend.applyPriceList(actor(), reference, changes);
+    await refresh();
+    return n;
+  };
   const setCustomRequestSupplier: Store['setCustomRequestSupplier'] = async (id, supplier) => {
     await backend.setCustomRequestSupplier(actor(), id, supplier);
     await refresh();
@@ -369,6 +406,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     markNotificationsRead,
     searchAgusta,
     searchMarket,
+    searchSuppliers,
+    saveSupplierSites,
+    applyPriceList,
     setCustomRequestSupplier,
     syncAgustaCatalog,
     toasts,

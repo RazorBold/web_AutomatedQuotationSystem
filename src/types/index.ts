@@ -45,6 +45,22 @@ export interface Escalation {
   decidedAt?: string;
 }
 
+/** R9: one HPP change, entered by hand or from a supplier price list. */
+export interface PriceChange {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  oldCogs?: number;
+  newCogs: number;
+  source: 'MANUAL' | 'IMPORT';
+  /** Price list name / file for imports. */
+  reference?: string;
+  by: string;
+  at: string;
+  atIso: string;
+}
+
 export interface Product {
   id: string;
   name: string;

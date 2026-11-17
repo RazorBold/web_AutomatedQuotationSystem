@@ -1,4 +1,5 @@
-import type { AppNotification, CustomProductRequest, CustomerInfo, FollowUpStatus, LostReason, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, CustomProductRequest, CustomerInfo, FollowUpStatus, LostReason, PriceChange, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
+import type { SupplierSearchResult, SupplierSite } from '../utils/supplierSearch';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
@@ -14,6 +15,15 @@ export interface Snapshot {
   discountRules: DiscountRule[];
   /** The signed-in user's notifications, newest first. */
   notifications: AppNotification[];
+  /** R10: supplier websites (Sales Support & Management only). */
+  supplierSites: SupplierSite[];
+  /** R9: latest HPP changes, newest first (Sales Support & Management only). */
+  priceHistory: PriceChange[];
+}
+
+export interface PriceListChange {
+  productId: string;
+  cogs: number;
 }
 
 export interface NewQuotationInput {
@@ -109,6 +119,11 @@ export interface Backend {
 
   /** Comparable offers on the web for a custom request (Sales Support). */
   searchMarket(query: string): Promise<MarketSearchResult>;
+  /** R10: the item on supplier websites (domains) or, without any, the open web minus marketplaces. */
+  searchSuppliers(query: string, domains: string[]): Promise<SupplierSearchResult>;
+  saveSupplierSites(actor: UserProfile, sites: Omit<SupplierSite, 'id'>[]): Promise<void>;
+  /** R9: applies a reviewed supplier price list to HPP; returns how many products changed. */
+  applyPriceList(actor: UserProfile, reference: string, changes: PriceListChange[]): Promise<number>;
   /** Saves (or clears, with null) the supplier reference of a custom request. */
   setCustomRequestSupplier(actor: UserProfile, id: string, supplier: SupplierRef | null): Promise<void>;
 

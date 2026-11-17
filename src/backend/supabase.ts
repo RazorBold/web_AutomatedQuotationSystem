@@ -9,6 +9,7 @@ import type {
   CustomProductRequest,
   CustomerInfo,
   Escalation,
+  PriceChange,
   Product,
   Quotation,
   QuotationEvent,
@@ -324,6 +325,15 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       );
     },
 
+    async saveSupplierSites(_actor, sites) {
+      check(await sb.rpc('replace_supplier_sites', { p_sites: sites.map(s => ({ name: s.name, domain: s.domain })) }));
+    },
+
+    async applyPriceList(_actor, reference, changes) {
+      const { data } = check(await sb.rpc('apply_price_list', { p_reference: reference, p_changes: changes }));
+      return Number(data ?? 0);
+    },
+
     async importAgustaProducts(_actor, items) {
       const { data } = check(await sb.rpc('import_agusta_products', { p_items: items }));
       return data as { inserted: number; updated: number };
@@ -334,15 +344,18 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
     },
 
     async load(userId) {
-      const [users, products, quotations, requests, rules, notifications] = await Promise.all([
+      const [users, products, quotations, requests, rules, notifications, sites, history] = await Promise.all([
         sb.from('profiles').select('*').order('created_at'),
         sb.from('products').select('*, product_costs(cogs)').order('created_at'),
         sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs)), quotation_charges(*), quotation_followups(*)').order('created_at', { ascending: false }),
         sb.from('custom_requests').select('*, custom_request_costs(assigned_cogs, supplier_name, supplier_url, supplier_price)').order('submitted_at', { ascending: false }),
         sb.from('discount_rules').select('*').order('position'),
         sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+        // RLS returns no rows to Sales for these two.
+        sb.from('supplier_sites').select('*').order('position'),
+        sb.from('product_price_history').select('*, products(name, sku)').order('created_at', { ascending: false }).limit(200),
       ]);
-      [users, products, quotations, requests, rules, notifications].forEach(check);
+      [users, products, quotations, requests, rules, notifications, sites, history].forEach(check);
       return {
         users: (users.data ?? []).map(mapProfile),
         products: (products.data ?? []).map(mapProduct),
@@ -350,6 +363,22 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
         customRequests: (requests.data ?? []).map(mapRequest),
         discountRules: (rules.data ?? []).map(mapRule),
         notifications: (notifications.data ?? []).map(mapNotification),
+        supplierSites: (sites.data ?? []).map((r: Row) => ({ id: r.id, name: r.name, domain: r.domain })),
+        priceHistory: (history.data ?? []).map(
+          (r: Row): PriceChange => ({
+            id: r.id,
+            productId: r.product_id,
+            productName: r.products?.name ?? r.product_id,
+            sku: r.products?.sku ?? '',
+            oldCogs: r.old_cogs != null ? n(r.old_cogs) : undefined,
+            newCogs: n(r.new_cogs),
+            source: r.source,
+            reference: r.reference ?? undefined,
+            by: r.changed_by_name,
+            at: fmt(r.created_at),
+            atIso: r.created_at,
+          })
+        ),
       };
     },
 

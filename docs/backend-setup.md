@@ -22,6 +22,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
    5. `supabase/migrations/20261117000000_quote_options.sql`: diskon tambahan (Rp) dan pengaturan tampil/sembunyikan PPN & diskon di PDF.
    6. `supabase/migrations/20261118000000_tahap2_workflow.sql`: pagu/anggaran barang custom, aturan diskon per merek, biaya tambahan, eskalasi ke Management, revisi penawaran (-R1, -R2).
    7. `supabase/migrations/20261119000000_tahap3_followup.sql`: update perkembangan penawaran oleh Sales (status, nilai PO, alasan kalah) dan fungsi pengingat mingguan.
+   8. `supabase/migrations/20261120000000_tahap4_supplier.sql`: daftar website supplier, import price list ke HPP, dan riwayat perubahan HPP (hanya terlihat oleh Sales Support & Management).
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`
@@ -177,6 +178,8 @@ Saat Sales Support membuka request barang custom, panel **Riset harga pasar** me
 **Mengaktifkan:**
 1. Daftar di <https://serper.dev>. Kuota gratis 2.500 pencarian, setelahnya berbayar per pencarian.
 2. Salin API key ke env `SERPER_API_KEY` (di `.env.local` dan Vercel), lalu deploy ulang.
+
+**Tab Website supplier** memakai API key yang sama (endpoint `/api/supplier-search`, pencarian web Google, 1 kredit per pencarian). Pencarian dibatasi ke daftar website di menu *Supplier & HPP* (`site:`); bila daftar kosong, mencari di seluruh web dengan marketplace dikecualikan.
 
 Tanpa API key, panel berjalan dalam **mode manual**: tombol membuka pencarian di Google Shopping, Tokopedia, Shopee, Bhinneka, dan Blibli di tab baru, lalu supplier dicatat manual. Hasil pencarian di-cache 30 menit supaya kuota tidak cepat habis.
 

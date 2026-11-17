@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   BarChart3,
   Boxes,
+  Truck,
   ClipboardList,
   FilePlus2,
   Home,
@@ -71,6 +72,7 @@ export function Shell({ route, navigate, children }: { route: Route; navigate: (
       label: 'Data',
       items: [
         { id: 'catalog', label: 'Katalog produk', icon: Boxes, show: h => h('catalog:view') },
+        { id: 'suppliers', label: 'Supplier & HPP', icon: Truck, show: h => h('cogs:edit') },
         { id: 'discount-rules', label: 'Aturan diskon', icon: Percent, show: h => h('discount-rules:edit') },
         { id: 'reports', label: 'Laporan', icon: BarChart3, show: h => h('reports:view') },
       ],
