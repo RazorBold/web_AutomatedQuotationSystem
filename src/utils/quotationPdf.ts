@@ -5,6 +5,7 @@
 import type { Quotation, UserProfile } from '../types';
 import { formatRupiah } from './quotationEngine';
 import { pdfSafeImageUrl } from './agustaCatalog';
+import { customerAddress, documentView } from './quotationView';
 
 export const COMPANY = {
   address: 'Jl. Industri Raya No. 88, Kawasan Niaga Terpadu, Jakarta 14350',
@@ -92,7 +93,15 @@ export async function buildQuotationPdf(q: Quotation, director: Signer): Promise
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.text(`u.p. ${q.customer.contactPerson}`, L, 51);
-  doc.text(doc.splitTextToSize(`${q.customer.address}, ${q.customer.city}`, 95), L, 56);
+  const view = documentView(q);
+  const address = customerAddress(q);
+  let infoY = 56;
+  if (address) {
+    const lines = doc.splitTextToSize(address, 95);
+    doc.text(lines, L, infoY);
+    infoY += lines.length * 4;
+  }
+  if (q.customer.phone) doc.text(`Telp. ${q.customer.phone}`, L, infoY);
 
   [['Nomor', q.quotationNumber], ['Tanggal', q.date], ['Berlaku s.d.', q.validUntil], ['Perihal', 'Penawaran harga']].forEach(
     ([k, v], i) => {
@@ -114,8 +123,8 @@ export async function buildQuotationPdf(q: Quotation, director: Signer): Promise
   doc.text('No', L + 2, y + 5.3);
   doc.text('Produk', L + 10, y + 5.3);
   doc.text('Qty', 118, y + 5.3, { align: 'right' });
-  doc.text('Harga satuan', 146, y + 5.3, { align: 'right' });
-  doc.text('Disc.', 160, y + 5.3, { align: 'right' });
+  doc.text('Harga satuan', view.showDiscount ? 146 : 158, y + 5.3, { align: 'right' });
+  if (view.showDiscount) doc.text('Disc.', 160, y + 5.3, { align: 'right' });
   doc.text('Jumlah', R - 2, y + 5.3, { align: 'right' });
   y += 14;
 
@@ -169,8 +178,9 @@ export async function buildQuotationPdf(q: Quotation, director: Signer): Promise
       doc.setFontSize(9);
     }
     doc.text(`${it.qty} ${it.unit}`, 118, y, { align: 'right' });
-    doc.text(formatRupiah(it.sellingPrice), 146, y, { align: 'right' });
-    doc.text(it.discountPercent ? `${it.discountPercent}%` : '-', 160, y, { align: 'right' });
+    const line = view.lines[i]!;
+    doc.text(formatRupiah(line.unitPrice), view.showDiscount ? 146 : 158, y, { align: 'right' });
+    if (view.showDiscount) doc.text(line.discountText === '–' ? '-' : line.discountText!, 160, y, { align: 'right' });
     doc.text(formatRupiah(it.subtotal), R - 2, y, { align: 'right' });
     y += h;
     doc.setDrawColor(227, 230, 236);
@@ -186,14 +196,28 @@ export async function buildQuotationPdf(q: Quotation, director: Signer): Promise
     y += 6;
   };
   y += 2;
-  row('Subtotal', formatRupiah(q.subtotal));
-  row(`PPN ${q.taxRatePercent}%`, formatRupiah(q.taxAmount));
-  doc.setDrawColor(...navy);
-  doc.setLineWidth(0.6);
-  doc.line(128, y - 4, R, y - 4);
-  doc.setFontSize(10.5);
-  row('Total', formatRupiah(q.grandTotal), true);
+  for (const r of view.totals) {
+    if (r.strong) {
+      doc.setDrawColor(...navy);
+      doc.setLineWidth(0.6);
+      doc.line(L + 85, y - 4, R, y - 4);
+      doc.setFontSize(10.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(r.label, L + 87, y);
+      doc.text(r.value, R - 2, y, { align: 'right' });
+      y += 6;
+      doc.setFontSize(9);
+    } else {
+      row(r.label, r.value);
+    }
+  }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90, 90, 90);
+  doc.text(view.taxTerm, L, y + 2);
+  doc.setTextColor(20, 24, 33);
   doc.setFontSize(9);
+  y += 4;
 
   if (y > 230) {
     doc.addPage();

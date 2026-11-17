@@ -40,9 +40,14 @@ export function ReportsPage({ navigate }: { navigate: (r: Route) => void }) {
     .filter(x => x.a.count > 0 || x.u.status === 'ACTIVE')
     .sort((a, b) => b.a.value - a.a.value);
 
-  const bySegment = (Object.keys(SEGMENT_LABEL) as CustomerCategory[])
-    .map(s => ({ s, a: aggregate(quotations.filter(q => q.customer.category === s)) }))
-    .filter(x => x.a.count > 0);
+  const bySegment = [
+    ...(Object.keys(SEGMENT_LABEL) as CustomerCategory[]).map(s => ({
+      s: s as string,
+      label: SEGMENT_LABEL[s],
+      a: aggregate(quotations.filter(q => q.customer.category === s)),
+    })),
+    { s: 'NONE', label: 'Tanpa segmen', a: aggregate(quotations.filter(q => !q.customer.category)) },
+  ].filter(x => x.a.count > 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -100,9 +105,9 @@ export function ReportsPage({ navigate }: { navigate: (r: Route) => void }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {bySegment.map(({ s, a }) => (
+              {bySegment.map(({ s, label, a }) => (
                 <tr key={s}>
-                  <td className="px-5 py-3 font-semibold text-ink">{SEGMENT_LABEL[s]}</td>
+                  <td className="px-5 py-3 font-semibold text-ink">{label}</td>
                   <td className="px-3 py-3 text-right tabular-nums text-ink-2">
                     {a.issued}/{a.count}
                   </td>

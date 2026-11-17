@@ -19,6 +19,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
    2. `supabase/migrations/20261110000000_notifications.sql`: notifikasi di portal (lonceng), dibuat otomatis oleh trigger.
    3. `supabase/migrations/20261111000000_agusta_catalog.sql`: katalog diselaraskan dengan agusta.co.id (impor produk, foto & link di request, produk tanpa harga tidak bisa dipakai di penawaran).
    4. `supabase/migrations/20261112000000_supplier_research.sql`: acuan supplier dari riset harga pasar (hanya terlihat oleh Sales Support & Management).
+   5. `supabase/migrations/20261117000000_quote_options.sql`: diskon tambahan (Rp) dan pengaturan tampil/sembunyikan PPN & diskon di PDF.
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`
@@ -80,7 +81,7 @@ Di **WhatsApp Manager → Message templates → Create**:
 - **Body** (urutan variabel harus sama):
   ```
   Halo {{1}}, penawaran {{2}} untuk {{3}} telah DISETUJUI oleh Sales Support.
-  Total penawaran: {{4}} (termasuk PPN 11%).
+  Total penawaran: {{4}}.
   Dokumen PDF resmi bertanda tangan terlampir dan siap diteruskan ke customer.
   ```
 - **Footer:** `Agusta Quotation System`

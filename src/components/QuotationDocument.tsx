@@ -4,6 +4,7 @@ import type { Quotation } from '../types';
 import { formatRupiah, formatWhatsAppQuotationMessage } from '../utils/quotationEngine';
 import { buildWhatsAppTemplatePayload } from '../utils/whatsapp';
 import { COMPANY, Signer, downloadQuotationPdf, getDirector, isIssued } from '../utils/quotationPdf';
+import { customerAddress, documentView } from '../utils/quotationView';
 import { AgustaLogo } from './AgustaLogo';
 import { Button, Dialog, IconButton, ProductImage } from './ui';
 import { errorMessage, useStore } from '../store/AppStore';
@@ -38,6 +39,8 @@ function Signature({ name }: { name: string }) {
 export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
   const director = useDirector();
   const issued = isIssued(q);
+  const view = documentView(q);
+  const address = customerAddress(q);
   return (
     <article className="print-sheet relative mx-auto w-full max-w-[794px] bg-white px-8 py-9 text-[12.5px] leading-relaxed text-ink shadow-paper sm:px-14 sm:py-12">
       {!issued && (
@@ -59,10 +62,8 @@ export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
           <p className="text-ink-3">Kepada Yth.</p>
           <p className="text-[14px] font-bold">{q.customer.companyName}</p>
           <p>u.p. {q.customer.contactPerson}</p>
-          <p className="max-w-[40ch] text-ink-2">
-            {q.customer.address}
-            {q.customer.city && `, ${q.customer.city}`}
-          </p>
+          {address && <p className="max-w-[40ch] text-ink-2">{address}</p>}
+          {q.customer.phone && <p className="text-ink-2">Telp. {q.customer.phone}</p>}
         </div>
         <table className="h-fit text-[12px]">
           <tbody>
@@ -95,12 +96,12 @@ export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
               <th className="px-2 py-2 font-semibold">Produk &amp; spesifikasi</th>
               <th className="px-2 py-2 text-right font-semibold">Qty</th>
               <th className="px-2 py-2 text-right font-semibold">Harga satuan</th>
-              <th className="px-2 py-2 text-right font-semibold">Disc.</th>
+              {view.showDiscount && <th className="px-2 py-2 text-right font-semibold">Disc.</th>}
               <th className="px-2 py-2 text-right font-semibold">Jumlah</th>
             </tr>
           </thead>
           <tbody>
-            {q.items.map((it, i) => (
+            {view.lines.map(({ item: it, unitPrice, discountText }, i) => (
               <tr key={it.id} className="border-b border-line align-top">
                 <td className="px-2 py-3 text-ink-3">{i + 1}</td>
                 <td className="px-2 py-3">
@@ -117,8 +118,8 @@ export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
                 <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums">
                   {it.qty} {it.unit}
                 </td>
-                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums">{formatRupiah(it.sellingPrice)}</td>
-                <td className="px-2 py-3 text-right tabular-nums">{it.discountPercent ? `${it.discountPercent}%` : '–'}</td>
+                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums">{formatRupiah(unitPrice)}</td>
+                {view.showDiscount && <td className="px-2 py-3 text-right tabular-nums">{discountText}</td>}
                 <td className="whitespace-nowrap px-2 py-3 text-right font-semibold tabular-nums">{formatRupiah(it.subtotal)}</td>
               </tr>
             ))}
@@ -128,25 +129,26 @@ export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
 
       <div className="mt-4 flex justify-end">
         <dl className="w-full max-w-[300px] text-[12.5px]">
-          <div className="flex justify-between py-1">
-            <dt className="text-ink-2">Subtotal</dt>
-            <dd className="tabular-nums">{formatRupiah(q.subtotal)}</dd>
-          </div>
-          <div className="flex justify-between py-1">
-            <dt className="text-ink-2">PPN {q.taxRatePercent}%</dt>
-            <dd className="tabular-nums">{formatRupiah(q.taxAmount)}</dd>
-          </div>
-          <div className="mt-1 flex justify-between border-t-2 border-navy pt-2 text-[14px] font-bold">
-            <dt>Total</dt>
-            <dd className="tabular-nums">{formatRupiah(q.grandTotal)}</dd>
-          </div>
+          {view.totals.map(r =>
+            r.strong ? (
+              <div key={r.label} className="mt-1 flex justify-between gap-4 border-t-2 border-navy pt-2 text-[14px] font-bold">
+                <dt>{r.label}</dt>
+                <dd className="whitespace-nowrap tabular-nums">{r.value}</dd>
+              </div>
+            ) : (
+              <div key={r.label} className="flex justify-between gap-4 py-1">
+                <dt className="text-ink-2">{r.label}</dt>
+                <dd className="whitespace-nowrap tabular-nums">{r.value}</dd>
+              </div>
+            )
+          )}
         </dl>
       </div>
 
       <div className="mt-6 max-w-[75ch] text-[11.5px] text-ink-2">
         <p className="font-semibold text-ink">Syarat &amp; ketentuan</p>
         <ol className="mt-1 list-decimal pl-4">
-          <li>Harga sudah termasuk PPN {q.taxRatePercent}% dan pengiriman wilayah Jabodetabek.</li>
+          <li>{view.taxTerm}</li>
           <li>Penawaran berlaku sampai {q.validUntil}. Ketersediaan stok mengikuti saat PO diterima.</li>
           <li>Garansi resmi sesuai ketentuan masing-masing merek.</li>
         </ol>
@@ -243,7 +245,8 @@ export function WhatsAppDialog({
     salesName: quotation.salesName,
     quotationNumber: quotation.quotationNumber,
     customerName: quotation.customer.companyName,
-    totalAmount: quotation.grandTotal,
+    totalAmount: documentView(quotation).headlineTotal,
+    includesTax: quotation.showTax !== false,
     approvedBy: quotation.reviewedBy ?? currentUser?.name ?? 'Sales Support',
     approvalDate: quotation.reviewedAt ?? '',
     downloadUrl: pdfUrl,
@@ -253,7 +256,8 @@ export function WhatsAppDialog({
     salesPhone: quotation.salesPhone,
     quotationNumber: quotation.quotationNumber,
     customerName: quotation.customer.companyName,
-    grandTotal: quotation.grandTotal,
+    grandTotal: documentView(quotation).headlineTotal,
+    includesTax: quotation.showTax !== false,
     pdfUrl,
   });
   const alreadySent = quotation.status === 'PDF_SENT';

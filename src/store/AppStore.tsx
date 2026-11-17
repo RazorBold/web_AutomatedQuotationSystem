@@ -12,6 +12,7 @@ import {
   type NewCustomRequestInput,
   type NewQuotationInput,
   type NewUserInput,
+  type QuotationAdjustments,
   type Result,
   type Snapshot,
   type UserPatch,
@@ -78,8 +79,8 @@ interface Store {
   dismissToast: (id: number) => void;
 
   createQuotation: (input: NewQuotationInput, existingId?: string) => Promise<Quotation>;
-  updateQuotationPricing: (id: string, items: QuotationItemData[], supportNotes?: string) => Promise<void>;
-  approveQuotation: (id: string, items: QuotationItemData[], supportNotes?: string) => Promise<ApproveOutcome>;
+  updateQuotationPricing: (id: string, items: QuotationItemData[], supportNotes?: string, adjustments?: QuotationAdjustments) => Promise<void>;
+  approveQuotation: (id: string, items: QuotationItemData[], supportNotes?: string, adjustments?: QuotationAdjustments) => Promise<ApproveOutcome>;
   rejectQuotation: (id: string, reason: string) => Promise<void>;
   sendWhatsApp: (id: string) => Promise<WhatsAppSendResult>;
 
@@ -217,13 +218,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     return findQuotation(await refresh(), id);
   };
 
-  const updateQuotationPricing: Store['updateQuotationPricing'] = async (id, items, supportNotes) => {
-    await backend.saveQuotationPricing(actor(), id, items, supportNotes);
+  const updateQuotationPricing: Store['updateQuotationPricing'] = async (id, items, supportNotes, adjustments) => {
+    await backend.saveQuotationPricing(actor(), id, items, supportNotes, adjustments);
     await refresh();
   };
 
-  const approveQuotation: Store['approveQuotation'] = async (id, items, supportNotes) => {
-    await backend.approveQuotation(actor(), id, items, supportNotes);
+  const approveQuotation: Store['approveQuotation'] = async (id, items, supportNotes, adjustments) => {
+    await backend.approveQuotation(actor(), id, items, supportNotes, adjustments);
     const s = await refresh();
     const approved = findQuotation(s, id);
     let delivery: ApproveOutcome['delivery'];

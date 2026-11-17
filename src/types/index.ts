@@ -66,11 +66,13 @@ export type CustomerCategory = 'BUMN_GOV' | 'CORPORATE' | 'EDUCATION' | 'RETAIL'
 export interface CustomerInfo {
   companyName: string;
   contactPerson: string;
+  /** Optional. */
   phone: string;
   email: string;
   address: string;
   city: string;
-  category: CustomerCategory;
+  /** Optional: without a segment there is no automatic discount suggestion. */
+  category?: CustomerCategory;
 }
 
 export interface QuotationEvent {
@@ -91,7 +93,14 @@ export interface Quotation {
   salesName: string;
   salesPhone: string;
   items: QuotationItemData[];
+  /** After every discount (item discounts and the extra discount), before PPN. */
   subtotal: number;
+  /** Quotation-level discount in rupiah, taken off the item lines before PPN. */
+  extraDiscount?: number;
+  /** PDF display: show the PPN line (default true). When false the document says "harga belum termasuk PPN". */
+  showTax?: boolean;
+  /** PDF display: show the discount column (default true). When false unit prices are shown after discount. */
+  showDiscount?: boolean;
   taxRatePercent: number;
   taxAmount: number;
   grandTotal: number;

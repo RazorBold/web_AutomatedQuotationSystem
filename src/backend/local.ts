@@ -35,7 +35,7 @@ export const initials = (name: string) =>
 
 function withTotals(q: Quotation, items: QuotationItemData[]): Quotation {
   const normalized = items.map(i => ({ ...i, subtotal: calculateLineSubtotal(i) }));
-  const t = calculateQuotationTotals(normalized, true, 11);
+  const t = calculateQuotationTotals(normalized, true, 11, q.extraDiscount ?? 0);
   return {
     ...q,
     items: normalized,
@@ -276,6 +276,7 @@ export function createLocalBackend(): Backend {
             ...existing,
             customer: input.customer,
             salesNotes: input.salesNotes,
+            extraDiscount: input.extraDiscount ?? existing?.extraDiscount ?? 0,
             status: 'PENDING_REVIEW',
             rejectionReason: undefined,
             history: [...(existing.history ?? []), { at: now(), by: actor.name, label: 'Direvisi dan diajukan ulang' }],
@@ -301,6 +302,7 @@ export function createLocalBackend(): Backend {
             grossProfit: 0,
             grossMarginPercent: 0,
             salesNotes: input.salesNotes,
+            extraDiscount: input.extraDiscount ?? 0,
             whatsAppStatus: 'PENDING',
             history: [{ at: now(), by: actor.name, label: 'Diajukan ke Sales Support' }],
           };
@@ -319,17 +321,17 @@ export function createLocalBackend(): Backend {
       return q.id;
     },
 
-    async saveQuotationPricing(actor, id, items, supportNotes) {
+    async saveQuotationPricing(actor, id, items, supportNotes, adjustments) {
       require(actor, 'cogs:edit');
-      patchQuotation(id, q => ({ ...repriced(q, items), supportNotes: supportNotes ?? q.supportNotes }));
+      patchQuotation(id, q => ({ ...repriced({ ...q, ...adjustments }, items), supportNotes: supportNotes ?? q.supportNotes }));
     },
 
-    async approveQuotation(actor, id, items, supportNotes) {
+    async approveQuotation(actor, id, items, supportNotes, adjustments) {
       require(actor, 'quotation:review');
       const q = state.quotations.find(x => x.id === id);
       if (!q || q.status !== 'PENDING_REVIEW') throw new Error('Penawaran ini tidak sedang menunggu review.');
       patchQuotation(id, cur => ({
-        ...repriced(cur, items),
+        ...repriced({ ...cur, ...adjustments }, items),
         supportNotes,
         status: 'APPROVED',
         reviewedBy: actor.name,

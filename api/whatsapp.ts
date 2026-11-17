@@ -18,7 +18,7 @@ export const POST = handle(async request => {
   const db = admin();
   const { data: q, error } = await db
     .from('quotations')
-    .select('id, quotation_number, status, customer, sales_name, sales_phone, grand_total, pdf_path')
+    .select('id, quotation_number, status, customer, sales_name, sales_phone, grand_total, subtotal, show_tax, pdf_path')
     .eq('id', quotationId)
     .maybeSingle();
   if (error) throw new HttpError(500, error.message);
@@ -39,7 +39,9 @@ export const POST = handle(async request => {
     salesPhone: q.sales_phone,
     quotationNumber: q.quotation_number,
     customerName: (q.customer as { companyName?: string })?.companyName ?? '-',
-    grandTotal: Number(q.grand_total),
+    // With PPN hidden the customer sees the pre-tax subtotal as the total.
+    grandTotal: Number(q.show_tax === false ? q.subtotal : q.grand_total),
+    includesTax: q.show_tax !== false,
     pdfUrl: signed.signedUrl,
     templateName: process.env.WHATSAPP_TEMPLATE_NAME,
     templateLang: process.env.WHATSAPP_TEMPLATE_LANG,

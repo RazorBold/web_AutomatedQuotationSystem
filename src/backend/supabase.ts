@@ -16,7 +16,7 @@ import type {
 } from '../types';
 import type { CustomerCategory, DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
-import type { Backend, Result } from './types';
+import type { Backend, QuotationAdjustments, Result } from './types';
 import { agustaApi } from './agustaApi';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -130,6 +130,9 @@ function mapQuotation(r: Row): Quotation {
     rejectionReason: r.rejection_reason ?? undefined,
     pdfGeneratedAt: r.pdf_generated_at ? fmt(r.pdf_generated_at) : undefined,
     pdfPath: r.pdf_path ?? undefined,
+    extraDiscount: n(r.extra_discount),
+    showTax: r.show_tax ?? true,
+    showDiscount: r.show_discount ?? true,
     whatsAppStatus: r.whatsapp_status ?? undefined,
     history: ((r.history ?? []) as Row[]).map(
       (h): QuotationEvent => ({ at: fmt(h.at), by: h.by, label: h.label, note: h.note ?? undefined })
@@ -204,6 +207,18 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
     const t = data.session?.access_token;
     if (!t) throw new Error('Sesi berakhir. Silakan masuk kembali.');
     return t;
+  }
+
+  async function applyAdjustments(id: string, a: QuotationAdjustments | undefined) {
+    if (!a) return;
+    check(
+      await sb.rpc('set_quotation_adjustments', {
+        p_id: id,
+        p_extra_discount: a.extraDiscount ?? null,
+        p_show_tax: a.showTax ?? null,
+        p_show_discount: a.showDiscount ?? null,
+      })
+    );
   }
 
   async function api<T>(path: string, body: unknown): Promise<T> {
@@ -325,14 +340,19 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
           p_existing_id: existingId ?? null,
         })
       );
+      if (input.extraDiscount !== undefined) {
+        check(await sb.rpc('set_quotation_adjustments', { p_id: data as string, p_extra_discount: input.extraDiscount }));
+      }
       return data as string;
     },
 
-    async saveQuotationPricing(_actor, id, items, supportNotes) {
+    async saveQuotationPricing(_actor, id, items, supportNotes, adjustments) {
+      await applyAdjustments(id, adjustments);
       check(await sb.rpc('save_quotation_pricing', { p_id: id, p_items: pricingPayload(items), p_support_notes: supportNotes ?? null }));
     },
 
-    async approveQuotation(_actor, id, items, supportNotes) {
+    async approveQuotation(_actor, id, items, supportNotes, adjustments) {
+      await applyAdjustments(id, adjustments);
       check(await sb.rpc('approve_quotation', { p_id: id, p_items: pricingPayload(items), p_support_notes: supportNotes ?? null }));
     },
 

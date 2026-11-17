@@ -8,6 +8,8 @@ import { MarginValue, MARGIN_FLOOR } from '../components/QuotationTable';
 import { PdfDialog, QuotationSheet, WhatsAppDialog, downloadQuotationPdf } from '../components/QuotationDocument';
 import { calculateLineSubtotal, calculateQuotationTotals, formatRupiah, validateMarginSafety } from '../utils/quotationEngine';
 import type { Route } from '../App';
+import { DiscountInput, RupiahInput } from '../components/DiscountInput';
+import type { QuotationAdjustments } from '../backend';
 
 const CATEGORY_LABEL = { BUMN_GOV: 'BUMN / Pemerintah', CORPORATE: 'Korporasi', EDUCATION: 'Pendidikan', RETAIL: 'Retail' } as const;
 
@@ -39,7 +41,7 @@ function CustomerBlock({ q }: { q: Quotation }) {
       <dt className="text-ink-3">Customer</dt>
       <dd className="font-semibold text-ink">{q.customer.companyName}</dd>
       <dt className="text-ink-3">Segmen</dt>
-      <dd className="text-ink">{CATEGORY_LABEL[q.customer.category]}</dd>
+      <dd className="text-ink">{q.customer.category ? CATEGORY_LABEL[q.customer.category] : 'Tidak ditentukan'}</dd>
       <dt className="text-ink-3">Kontak</dt>
       <dd className="text-ink">
         {q.customer.contactPerson}
@@ -65,16 +67,23 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
   const [reasonError, setReasonError] = useState('');
   const [acceptLowMargin, setAcceptLowMargin] = useState(false);
   const [busy, setBusy] = useState<'approve' | 'reject' | 'save' | null>(null);
+  const [adj, setAdj] = useState<Required<QuotationAdjustments>>({
+    extraDiscount: q.extraDiscount ?? 0,
+    showTax: q.showTax ?? true,
+    showDiscount: q.showDiscount ?? true,
+  });
 
   const floor = Math.min(MARGIN_FLOOR, ...discountRules.map(r => r.minMarginPercent));
-  const totals = calculateQuotationTotals(items, true, 11);
+  const totals = calculateQuotationTotals(items, true, 11, adj.extraDiscount);
   const lines = items.map(it => ({
     it,
     subtotal: calculateLineSubtotal(it),
     safety: validateMarginSafety(it.cogs, it.sellingPrice, it.discountPercent, floor),
   }));
   const unsafe = lines.filter(l => !l.safety.isSafe);
-  const dirty = JSON.stringify(items) !== JSON.stringify(q.items) || notes !== (q.supportNotes ?? '');
+  const adjChanged =
+    adj.extraDiscount !== (q.extraDiscount ?? 0) || adj.showTax !== (q.showTax ?? true) || adj.showDiscount !== (q.showDiscount ?? true);
+  const dirty = JSON.stringify(items) !== JSON.stringify(q.items) || notes !== (q.supportNotes ?? '') || adjChanged;
 
   const patch = (idx: number, p: Partial<QuotationItemData>) =>
     setItems(prev => prev.map((it, i) => (i === idx ? { ...it, ...p } : it)));
@@ -83,7 +92,7 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
   const approve = async () => {
     setBusy('approve');
     try {
-      const { delivery } = await approveQuotation(q.id, items, notes);
+      const { delivery } = await approveQuotation(q.id, items, notes, { ...adj, extraDiscount: totals.extraDiscount });
       if (!delivery.ok) {
         notify(`${q.quotationNumber} disetujui, tetapi WhatsApp gagal dikirim: ${delivery.error} Kirim ulang dari halaman ini.`, 'error');
       } else if (delivery.whatsapp.mode === 'live') {
@@ -118,7 +127,7 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
   const savePricing = async () => {
     setBusy('save');
     try {
-      await updateQuotationPricing(q.id, items, notes);
+      await updateQuotationPricing(q.id, items, notes, { ...adj, extraDiscount: totals.extraDiscount });
       notify('Perubahan harga disimpan.');
     } catch (e) {
       notify(errorMessage(e), 'error');
@@ -142,13 +151,13 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
           description={`Margin per item dihitung dari harga setelah diskon. Batas aman ${floor}%.`}
           bodyClassName="overflow-x-auto"
         >
-          <table className="w-full min-w-[680px] text-left text-[13px]">
+          <table className="w-full min-w-[860px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-line text-xs text-ink-3">
                 <th className="px-5 py-2.5 font-medium">Produk</th>
                 <th className="w-28 px-2 py-2.5 text-right font-medium">HPP / unit</th>
                 <th className="w-32 px-2 py-2.5 text-right font-medium">Harga jual / unit</th>
-                <th className="w-16 px-2 py-2.5 text-right font-medium">Disc. %</th>
+                <th className="w-44 px-2 py-2.5 text-right font-medium">Diskon (% / Rp per unit)</th>
                 <th className="w-28 px-2 py-2.5 text-right font-medium">Jumlah</th>
                 <th className="w-24 px-4 py-2.5 text-right font-medium">Margin</th>
               </tr>
@@ -186,13 +195,12 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
                       onChange={e => patch(idx, { sellingPrice: num(e.target.value) })}
                     />
                   </td>
-                  <td className="px-2 py-3">
-                    <input
-                      aria-label={`Diskon ${it.productName}`}
-                      inputMode="decimal"
-                      className={MONEY_INPUT}
-                      value={it.discountPercent}
-                      onChange={e => patch(idx, { discountPercent: Math.min(100, Number(e.target.value.replace(',', '.')) || 0) })}
+                  <td className="px-2 py-3 text-right">
+                    <DiscountInput
+                      label={`Diskon ${it.productName}`}
+                      percent={it.discountPercent}
+                      unitPrice={it.sellingPrice}
+                      onChange={discountPercent => patch(idx, { discountPercent })}
                     />
                   </td>
                   <td className="px-2 py-3 pt-5 text-right font-semibold tabular-nums text-ink">{formatRupiah(subtotal)}</td>
@@ -223,6 +231,22 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
         <Panel title="Ringkasan">
           <dl className="space-y-2 text-[13px]">
             <div className="flex justify-between">
+              <dt className="text-ink-2">Total item</dt>
+              <dd className="tabular-nums text-ink">{formatRupiah(totals.itemsTotal)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-ink-2">Diskon tambahan (Rp)</dt>
+              <dd>
+                <RupiahInput
+                  label="Diskon tambahan untuk seluruh penawaran"
+                  value={adj.extraDiscount}
+                  max={totals.itemsTotal}
+                  onChange={extraDiscount => setAdj(a => ({ ...a, extraDiscount }))}
+                  className="w-32"
+                />
+              </dd>
+            </div>
+            <div className="flex justify-between">
               <dt className="text-ink-2">Subtotal</dt>
               <dd className="tabular-nums text-ink">{formatRupiah(totals.subtotal)}</dd>
             </div>
@@ -251,6 +275,29 @@ function ReviewWorkspace({ q, navigate, onApproved }: { q: Quotation; navigate: 
               </dd>
             </div>
           </dl>
+
+          <fieldset className="mt-4 rounded-lg border border-line p-3.5">
+            <legend className="px-1 text-[13px] font-semibold text-ink">Tampilan di PDF</legend>
+            {(
+              [
+                ['showTax', 'Tampilkan PPN', 'Bila tidak dicentang: baris PPN disembunyikan, surat mencantumkan “harga belum termasuk PPN”.'],
+                ['showDiscount', 'Tampilkan diskon', 'Bila tidak dicentang: kolom diskon disembunyikan, harga satuan langsung harga setelah diskon per item. Diskon tambahan tetap tertulis.'],
+              ] as const
+            ).map(([key, label, hint]) => (
+              <label key={key} className="mt-2 flex cursor-pointer items-start gap-2.5 first-of-type:mt-0.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-[var(--color-link)]"
+                  checked={adj[key]}
+                  onChange={e => setAdj(a => ({ ...a, [key]: e.target.checked }))}
+                />
+                <span>
+                  <span className="block text-[13px] text-ink">{label}</span>
+                  <span className="block text-xs text-ink-3">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
 
           {unsafe.length > 0 && (
             <div className="mt-4 rounded-lg bg-brand-soft px-3.5 py-3 text-[13px] text-brand-strong">

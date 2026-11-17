@@ -56,24 +56,31 @@ export function calculateLineSubtotal(item: Pick<QuotationItem, 'qty' | 'selling
 }
 
 /**
- * Calculate total quotation financials including PPN (11% Indonesia VAT)
+ * Calculate total quotation financials including PPN (11% Indonesia VAT).
+ *
+ * `extraDiscount` is a quotation-level discount in rupiah (diskon tambahan), taken off the sum of
+ * the item lines before PPN. `subtotal` is the amount after every discount; `itemsTotal` is before
+ * the extra discount.
  */
 export function calculateQuotationTotals(
   items: QuotationItem[],
   includeTax: boolean = true,
-  taxRatePercent: number = 11
+  taxRatePercent: number = 11,
+  extraDiscount: number = 0
 ) {
-  let subtotal = 0;
+  let itemsTotal = 0;
   let totalCogs = 0;
   let totalGrossBase = 0;
 
   for (const item of items) {
     const lineSubtotal = calculateLineSubtotal(item);
-    subtotal += lineSubtotal;
+    itemsTotal += lineSubtotal;
     totalCogs += Math.round(item.qty * (item.cogs || 0));
     totalGrossBase += Math.round(item.qty * item.sellingPrice);
   }
 
+  const appliedExtraDiscount = Math.min(itemsTotal, Math.max(0, Math.round(extraDiscount || 0)));
+  const subtotal = itemsTotal - appliedExtraDiscount;
   const taxAmount = includeTax ? Math.round((subtotal * taxRatePercent) / 100) : 0;
   const grandTotal = subtotal + taxAmount;
   const grossProfit = subtotal - totalCogs;
@@ -81,6 +88,8 @@ export function calculateQuotationTotals(
   const totalDiscountAmount = totalGrossBase - subtotal;
 
   return {
+    itemsTotal,
+    extraDiscount: appliedExtraDiscount,
     subtotal,
     taxRatePercent: includeTax ? taxRatePercent : 0,
     taxAmount,
@@ -93,12 +102,16 @@ export function calculateQuotationTotals(
   };
 }
 
+/** Used when no rule applies, e.g. the customer segment was left empty: no automatic discount. */
+export const FALLBACK_DISCOUNT = { suggestedPercent: 0, maxAllowedPercent: 5, minMarginPercent: 20 } as const;
+
 /**
- * Determine suggested discount based on quantity and customer segment
+ * Determine suggested discount based on quantity and customer segment.
+ * Without a segment there is no automatic suggestion (the rep sets the discount).
  */
 export function getSuggestedDiscount(
   qty: number,
-  category: CustomerCategory = 'CORPORATE',
+  category: CustomerCategory | null | undefined,
   rules: DiscountRule[] = DEFAULT_DISCOUNT_RULES
 ): {
   suggestedPercent: number;
@@ -108,6 +121,7 @@ export function getSuggestedDiscount(
   if (qty <= 0) {
     return { suggestedPercent: 0, maxAllowedPercent: 0, minMarginPercent: 20 };
   }
+  if (!category) return { ...FALLBACK_DISCOUNT };
 
   const inRange = (r: DiscountRule) => qty >= r.minQty && (r.maxQty === undefined || qty <= r.maxQty);
   // Retail customers fall back to the corporate tiers when no retail rule matches.
@@ -117,7 +131,7 @@ export function getSuggestedDiscount(
       .sort((a, b) => b.minQty - a.minQty)[0];
 
   const rule = pick(category) ?? (category === 'RETAIL' ? pick('CORPORATE') : undefined);
-  if (!rule) return { suggestedPercent: 0, maxAllowedPercent: 5, minMarginPercent: 20 };
+  if (!rule) return { ...FALLBACK_DISCOUNT };
 
   return {
     suggestedPercent: rule.suggestedDiscount,
@@ -208,8 +222,11 @@ export function formatWhatsAppQuotationMessage(params: {
   approvedBy: string;
   approvalDate: string;
   downloadUrl?: string;
+  /** False when the quotation is shown without PPN; the amount is then the pre-tax subtotal. */
+  includesTax?: boolean;
 }): string {
   const formattedTotal = formatRupiah(params.totalAmount);
+  const taxNote = params.includesTax === false ? 'belum termasuk PPN' : 'inc. PPN 11%';
   return [
     `*NOTIFIKASI RESMI AGUSTA QUOTATION SYSTEM*`,
     `Halo *${params.salesName}*,`,
@@ -217,7 +234,7 @@ export function formatWhatsAppQuotationMessage(params: {
     `Pengajuan surat penawaran Anda telah *DISETUJUI* oleh Tim Sales Support:`,
     `• *No. Penawaran*: ${params.quotationNumber}`,
     `• *Customer*: ${params.customerName}`,
-    `• *Total Penawaran*: ${formattedTotal} (inc. PPN 11%)`,
+    `• *Total Penawaran*: ${formattedTotal} (${taxNote})`,
     `• *Disetujui Oleh*: ${params.approvedBy}`,
     `• *Waktu Approval*: ${params.approvalDate}`,
     ``,

@@ -20,6 +20,15 @@ export interface NewQuotationInput {
   customer: CustomerInfo;
   items: Pick<QuotationItemData, 'productId' | 'qty' | 'discountPercent' | 'notes'>[];
   salesNotes: string;
+  /** Quotation-level discount in rupiah (diskon tambahan). */
+  extraDiscount?: number;
+}
+
+/** Quotation-level settings Sales Support can change while reviewing. */
+export interface QuotationAdjustments {
+  extraDiscount?: number;
+  showTax?: boolean;
+  showDiscount?: boolean;
 }
 
 export type NewCustomRequestInput = Pick<
@@ -50,8 +59,8 @@ export interface Backend {
   subscribe(onChange: () => void): () => void;
 
   createQuotation(actor: UserProfile, input: NewQuotationInput, existingId?: string): Promise<string>;
-  saveQuotationPricing(actor: UserProfile, id: string, items: QuotationItemData[], supportNotes?: string): Promise<void>;
-  approveQuotation(actor: UserProfile, id: string, items: QuotationItemData[], supportNotes?: string): Promise<void>;
+  saveQuotationPricing(actor: UserProfile, id: string, items: QuotationItemData[], supportNotes?: string, adjustments?: QuotationAdjustments): Promise<void>;
+  approveQuotation(actor: UserProfile, id: string, items: QuotationItemData[], supportNotes?: string, adjustments?: QuotationAdjustments): Promise<void>;
   rejectQuotation(actor: UserProfile, id: string, reason: string): Promise<void>;
   /** Stores the issued PDF so the WhatsApp message can link to it. */
   attachQuotationPdf(actor: UserProfile, quotation: Quotation, pdf: Blob): Promise<void>;

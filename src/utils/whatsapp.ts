@@ -22,7 +22,10 @@ export interface WhatsAppQuotationParams {
   salesPhone: string;
   quotationNumber: string;
   customerName: string;
+  /** Amount shown to the customer: grand total, or the pre-tax subtotal when PPN is hidden. */
   grandTotal: number;
+  /** False when the quotation is shown without PPN. */
+  includesTax?: boolean;
   pdfUrl: string;
   templateName?: string;
   templateLang?: string;
@@ -32,7 +35,7 @@ export interface WhatsAppQuotationParams {
  * Template message with the PDF as document header.
  * The template must exist and be approved in Meta Business Manager with:
  *   header: DOCUMENT
- *   body:   4 variables → {{1}} sales name, {{2}} quotation number, {{3}} customer, {{4}} total
+ *   body:   4 variables → {{1}} sales name, {{2}} quotation number, {{3}} customer, {{4}} total incl. PPN note, e.g. "Rp 233.100.000 (termasuk PPN 11%)"
  */
 export function buildWhatsAppTemplatePayload(p: WhatsAppQuotationParams) {
   return {
@@ -50,7 +53,7 @@ export function buildWhatsAppTemplatePayload(p: WhatsAppQuotationParams) {
         },
         {
           type: 'body',
-          parameters: [p.salesName, p.quotationNumber, p.customerName, formatRupiah(p.grandTotal)].map(text => ({ type: 'text', text })),
+          parameters: [p.salesName, p.quotationNumber, p.customerName, `${formatRupiah(p.grandTotal)} (${p.includesTax === false ? 'belum termasuk PPN' : 'termasuk PPN 11%'})`].map(text => ({ type: 'text', text })),
         },
       ],
     },

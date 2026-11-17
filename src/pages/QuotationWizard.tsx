@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Check, ChevronLeft, MessageSquarePlus, Minus, PackageSearch, Plus, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { SmartSuggestions } from '../components/SmartSuggestions';
+import { DiscountInput, RupiahInput } from '../components/DiscountInput';
 import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
 import { AgustaWebResults } from '../components/AgustaWebResults';
 import { agustaImageUrl } from '../utils/agustaCatalog';
@@ -35,8 +36,13 @@ const EMPTY_CUSTOMER: CustomerInfo = {
   email: '',
   address: '',
   city: '',
-  category: 'CORPORATE',
 };
+
+/** "Tidak ditentukan" first: the segment is optional and only drives the automatic discount suggestion. */
+const SEGMENT_OPTIONS: { value?: CustomerCategory; label: string; hint: string }[] = [
+  { label: 'Tidak ditentukan', hint: 'Tanpa saran diskon otomatis, diskon diisi sendiri' },
+  ...SEGMENTS,
+];
 
 export function QuotationWizard({
   editId,
@@ -60,6 +66,7 @@ export function QuotationWizard({
     return [];
   });
   const [salesNotes, setSalesNotes] = useState(editing?.salesNotes ?? '');
+  const [extraDiscount, setExtraDiscount] = useState(editing?.extraDiscount ?? 0);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Semua');
   const [submitting, setSubmitting] = useState(false);
@@ -114,14 +121,15 @@ export function QuotationWizard({
     const p = byId(l.productId);
     return { l, p, subtotal: calculateLineSubtotal({ qty: l.qty, sellingPrice: p.basePrice, discountPercent: l.discountPercent }) };
   });
-  const subtotal = priced.reduce((s, x) => s + x.subtotal, 0);
+  const itemsTotal = priced.reduce((s, x) => s + x.subtotal, 0);
+  const appliedExtra = Math.min(itemsTotal, extraDiscount);
+  const subtotal = itemsTotal - appliedExtra;
   const tax = Math.round(subtotal * 0.11);
 
   const validateCustomer = () => {
     const e: typeof errors = {};
     if (!customer.companyName.trim()) e.companyName = 'Isi nama instansi atau perusahaan.';
     if (!customer.contactPerson.trim()) e.contactPerson = 'Isi nama orang yang dituju di surat.';
-    if (!customer.phone.trim()) e.phone = 'Isi nomor telepon kontak.';
     if (customer.email && !/^\S+@\S+\.\S+$/.test(customer.email)) e.email = 'Format email belum benar, contoh: nama@perusahaan.co.id';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -140,7 +148,12 @@ export function QuotationWizard({
   const submit = () => {
     setSubmitting(true);
     createQuotation(
-      { customer, salesNotes, items: lines.map(l => ({ productId: l.productId, qty: l.qty, discountPercent: l.discountPercent, notes: l.notes })) },
+      {
+        customer,
+        salesNotes,
+        extraDiscount: appliedExtra,
+        items: lines.map(l => ({ productId: l.productId, qty: l.qty, discountPercent: l.discountPercent, notes: l.notes })),
+      },
       editing?.id
     )
       .then(q => {
@@ -183,6 +196,7 @@ export function QuotationWizard({
             specs: p.specs,
           })),
           subtotal,
+          extraDiscount: appliedExtra,
           taxRatePercent: 11,
           taxAmount: tax,
           grandTotal: subtotal + tax,
@@ -255,7 +269,7 @@ export function QuotationWizard({
             <Field label="Nama kontak (u.p.)" error={errors.contactPerson}>
               {p => <Input {...p} value={customer.contactPerson} onChange={e => setCustomer({ ...customer, contactPerson: e.target.value })} placeholder="Bapak Hendra Wijaya" />}
             </Field>
-            <Field label="Telepon kontak" error={errors.phone}>
+            <Field label="Telepon kontak" optional error={errors.phone}>
               {p => <Input {...p} type="tel" value={customer.phone} onChange={e => setCustomer({ ...customer, phone: e.target.value })} placeholder="+62 811-2233-4455" />}
             </Field>
             <Field label="Email" optional error={errors.email}>
@@ -270,16 +284,19 @@ export function QuotationWizard({
           </div>
 
           <fieldset className="mt-6">
-            <legend className="text-[13px] font-semibold text-ink">Segmen customer</legend>
+            <legend className="text-[13px] font-semibold text-ink">
+              Segmen customer <span className="font-normal text-ink-3">(opsional)</span>
+            </legend>
             <p className="mt-0.5 text-xs text-ink-3">Menentukan saran diskon otomatis.</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {SEGMENTS.map(s => {
+              {SEGMENT_OPTIONS.map(s => {
                 const active = customer.category === s.value;
                 return (
                   <label
-                    key={s.value}
+                    key={s.value ?? 'none'}
                     className={cx(
                       'flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-3 transition-colors',
+                      !s.value && 'sm:col-span-2',
                       active ? 'border-link bg-link-soft/50' : 'border-line hover:border-line-strong'
                     )}
                   >
@@ -454,24 +471,24 @@ export function QuotationWizard({
                               <Plus className="size-3.5" />
                             </button>
                           </div>
-                          <label className="flex items-center gap-1.5 text-xs text-ink-2">
+                          <span className="flex items-center gap-1.5 text-xs text-ink-2">
                             Diskon
-                            <input
-                              inputMode="decimal"
-                              value={l.discountPercent}
-                              onChange={e => setLine(p.id, { discountPercent: Math.min(100, Math.max(0, Number(e.target.value.replace(',', '.')) || 0)) })}
-                              className={cx(
-                                'h-8 w-14 rounded-md border px-2 text-right text-[13px] tabular-nums focus:outline-none focus:ring-3',
-                                over ? 'border-amber-400 focus:ring-amber-200' : 'border-line-strong focus:border-link focus:ring-link/15'
-                              )}
+                            <DiscountInput
+                              label={`Diskon ${p.name}`}
+                              percent={l.discountPercent}
+                              unitPrice={p.basePrice}
+                              warn={over}
+                              compact
+                              onChange={discountPercent => setLine(p.id, { discountPercent })}
                             />
-                            %
-                          </label>
+                          </span>
                         </div>
                         <p className={cx('mt-1.5 text-xs', over ? 'text-amber-700' : 'text-ink-3')}>
                           {over
                             ? `Di atas batas ${s.maxAllowedPercent}%. Sales Support perlu menyetujui khusus.`
-                            : `Saran ${s.suggestedPercent}%, maks. ${s.maxAllowedPercent}% untuk ${l.qty} ${p.unit.toLowerCase()}.`}
+                            : customer.category
+                              ? `Saran ${s.suggestedPercent}%, maks. ${s.maxAllowedPercent}% untuk ${l.qty} ${p.unit.toLowerCase()}.`
+                              : `Tanpa segmen: isi diskon sendiri, maks. ${s.maxAllowedPercent}% tanpa persetujuan khusus.`}
                         </p>
                         <input
                           aria-label={`Catatan ${p.name}`}
@@ -488,9 +505,23 @@ export function QuotationWizard({
               )}
               <dl className="space-y-1.5 border-t border-line px-5 py-4 text-[13px]">
                 <div className="flex justify-between">
-                  <dt className="text-ink-2">Subtotal</dt>
-                  <dd className="tabular-nums">{formatRupiah(subtotal)}</dd>
+                  <dt className="text-ink-2">Total item</dt>
+                  <dd className="tabular-nums">{formatRupiah(itemsTotal)}</dd>
                 </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-ink-2">
+                    Diskon tambahan <span className="text-xs text-ink-3">(Rp, opsional)</span>
+                  </dt>
+                  <dd>
+                    <RupiahInput label="Diskon tambahan untuk seluruh penawaran" value={extraDiscount} onChange={setExtraDiscount} max={itemsTotal} className="w-32" />
+                  </dd>
+                </div>
+                {appliedExtra > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="text-ink-2">Subtotal setelah diskon</dt>
+                    <dd className="tabular-nums">{formatRupiah(subtotal)}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-ink-2">PPN 11%</dt>
                   <dd className="tabular-nums">{formatRupiah(tax)}</dd>
