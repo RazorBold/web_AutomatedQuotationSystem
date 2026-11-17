@@ -3,7 +3,8 @@
  * Behaviour matches the original prototype; WhatsApp is always simulated.
  */
 import { INITIAL_CUSTOM_REQUESTS, INITIAL_QUOTATIONS, PRODUCTS, USERS } from '../data/mockData';
-import type { AppNotification, NotificationType, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, FollowUp, NotificationType, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
+import { FOLLOWUP_INTERVAL_DAYS, needsFollowUp } from '../utils/analytics';
 import { can, type Permission } from '../auth/permissions';
 import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, generateQuotationNumber, normalizeBrand } from '../utils/quotationEngine';
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
@@ -147,6 +148,37 @@ export function createLocalBackend(): Backend {
     state = { ...state, notifications: [...items, ...state.notifications].slice(0, 500) };
     save();
   };
+  /** Demo-mode stand-in for the weekly cron (api/followup-reminders.ts): one reminder per 7 days. */
+  const remindFollowUps = () => {
+    const me = state.users.find(u => u.id === state.sessionUserId);
+    if (!me || me.role !== 'SALES') return;
+    const due = state.quotations.filter(q => q.salesId === me.id && needsFollowUp(q));
+    if (!due.length) return;
+    const recent = state.notifications.some(
+      n => n.userId === me.id && n.type === 'FOLLOWUP_REMINDER' && Date.now() - new Date(n.createdAtIso).getTime() < FOLLOWUP_INTERVAL_DAYS * 86400000
+    );
+    if (recent) return;
+    const at = new Date();
+    state = {
+      ...state,
+      notifications: [
+        {
+          id: `ntf-${at.getTime()}-reminder`,
+          userId: me.id,
+          type: 'FOLLOWUP_REMINDER',
+          title: `${due.length} penawaran perlu update minggu ini`,
+          body: due.map(q => `${q.quotationNumber} · ${q.customer.companyName}`).join('; '),
+          quotationId: due.length === 1 ? due[0]!.id : undefined,
+          createdAt: now(),
+          createdAtIso: at.toISOString(),
+          read: false,
+        },
+        ...state.notifications,
+      ],
+    };
+    save();
+  };
+
   const reviewers = () =>
     state.users.filter(u => u.status === 'ACTIVE' && (u.role === 'SALES_SUPPORT' || u.role === 'MANAGEMENT')).map(u => u.id);
   const qRef = (q: Quotation) => `${q.quotationNumber} · ${q.customer.companyName}`;
@@ -191,6 +223,7 @@ export function createLocalBackend(): Backend {
     },
 
     async load() {
+      remindFollowUps();
       const { sessionUserId, notifications, ...snap } = state;
       return { ...snap, notifications: notifications.filter(n => n.userId === sessionUserId) };
     },
@@ -291,7 +324,7 @@ export function createLocalBackend(): Backend {
             charges: withCharges(input.charges, existing.charges),
             status: 'PENDING_REVIEW',
             rejectionReason: undefined,
-            history: [...(existing.history ?? []), { at: now(), by: actor.name, label: 'Direvisi dan diajukan ulang' }],
+            history: [...(existing.history ?? []), { at: now(), atIso: new Date().toISOString(), by: actor.name, label: 'Direvisi dan diajukan ulang' }],
           }
         : {
             id: `qtn-${Date.now()}`,
@@ -317,7 +350,8 @@ export function createLocalBackend(): Backend {
             extraDiscount: input.extraDiscount ?? 0,
             charges: withCharges(input.charges),
             whatsAppStatus: 'PENDING',
-            history: [{ at: now(), by: actor.name, label: 'Diajukan ke Sales Support' }],
+            history: [{ at: now(), atIso: new Date().toISOString(), by: actor.name, label: 'Diajukan ke Sales Support' }],
+            createdAtIso: new Date().toISOString(),
           };
 
       const q = withTotals(base, items);
@@ -349,8 +383,9 @@ export function createLocalBackend(): Backend {
         status: 'APPROVED',
         reviewedBy: actor.name,
         reviewedAt: now(),
+        reviewedAtIso: new Date().toISOString(),
         pdfGeneratedAt: now(),
-        history: [...(cur.history ?? []), { at: now(), by: actor.name, label: 'Disetujui, PDF diterbitkan' }],
+        history: [...(cur.history ?? []), { at: now(), atIso: new Date().toISOString(), by: actor.name, label: 'Disetujui, PDF diterbitkan' }],
       }));
       const done = state.quotations.find(x => x.id === id)!;
       notify(actor, [done.salesId], 'QUOTATION_APPROVED', 'Penawaran disetujui', `${qRef(done)} · ${formatRupiah(done.grandTotal)}. PDF resmi sudah terbit.`, {
@@ -366,7 +401,7 @@ export function createLocalBackend(): Backend {
         rejectionReason: reason,
         reviewedBy: actor.name,
         reviewedAt: now(),
-        history: [...(q.history ?? []), { at: now(), by: actor.name, label: 'Dikembalikan untuk revisi', note: reason }],
+        history: [...(q.history ?? []), { at: now(), atIso: new Date().toISOString(), by: actor.name, label: 'Dikembalikan untuk revisi', note: reason }],
       }));
       const q = state.quotations.find(x => x.id === id);
       if (q) notify(actor, [q.salesId], 'QUOTATION_REJECTED', 'Penawaran perlu revisi', `${qRef(q)} · ${reason}`, { quotationId: id });
@@ -385,7 +420,7 @@ export function createLocalBackend(): Backend {
         ...cur,
         status: 'PDF_SENT',
         whatsAppStatus: 'SENT',
-        history: [...(cur.history ?? []), { at: now(), by: actor.name, label: 'Dikirim ke WhatsApp Sales (mode simulasi)' }],
+        history: [...(cur.history ?? []), { at: now(), atIso: new Date().toISOString(), by: actor.name, label: 'Dikirim ke WhatsApp Sales (mode simulasi)' }],
       }));
       return { mode: 'simulated', to: normalizeWhatsAppNumber(q.salesPhone) };
     },
@@ -416,7 +451,7 @@ export function createLocalBackend(): Backend {
         supportNotes: supportNotes ?? cur.supportNotes,
         status: 'PENDING_MANAGEMENT',
         escalation: escalationEvent(actor, note),
-        history: [...(cur.history ?? []), { at: now(), by: actor.name, label: 'Diteruskan ke Management', note: note.trim() }],
+        history: [...(cur.history ?? []), { at: now(), atIso: new Date().toISOString(), by: actor.name, label: 'Diteruskan ke Management', note: note.trim() }],
       }));
       notify(actor, usersWithRole('MANAGEMENT'), 'QUOTATION_ESCALATED', `Eskalasi dari ${actor.name}`, `${qRef(q)} · ${note.trim()}`, { quotationId: id });
     },
@@ -432,7 +467,7 @@ export function createLocalBackend(): Backend {
         escalation: { ...cur.escalation!, decision, decisionNote: note.trim() || undefined, decidedBy: actor.name, decidedAt: now() },
         history: [
           ...(cur.history ?? []),
-          { at: now(), by: actor.name, label: decision === 'APPROVED' ? 'Disetujui Management' : 'Dikembalikan Management ke Sales Support', note: note.trim() || undefined },
+          { at: now(), atIso: new Date().toISOString(), by: actor.name, label: decision === 'APPROVED' ? 'Disetujui Management' : 'Dikembalikan Management ke Sales Support', note: note.trim() || undefined },
         ],
       }));
       if (q.escalation?.byId) {
@@ -519,7 +554,11 @@ export function createLocalBackend(): Backend {
           revisionOf: q.id,
           revisionNo: no,
           revisedTo: undefined,
-          history: [{ at: now(), by: actor.name, label: `Revisi dari ${q.quotationNumber}` }],
+          outcome: undefined,
+          followUps: undefined,
+          createdAtIso: new Date().toISOString(),
+          reviewedAtIso: undefined,
+          history: [{ at: now(), atIso: new Date().toISOString(), by: actor.name, label: `Revisi dari ${q.quotationNumber}` }],
         },
         q.items.map((it, i) => ({ ...it, id: `item-${Date.now()}-${i}` }))
       );
@@ -529,7 +568,7 @@ export function createLocalBackend(): Backend {
           fresh,
           ...state.quotations.map(x =>
             x.id === id
-              ? { ...x, status: 'REVISED' as const, revisedTo: newId, history: [...(x.history ?? []), { at: now(), by: actor.name, label: `Direvisi menjadi ${number}` }] }
+              ? { ...x, status: 'REVISED' as const, revisedTo: newId, history: [...(x.history ?? []), { at: now(), atIso: new Date().toISOString(), by: actor.name, label: `Direvisi menjadi ${number}` }] }
               : x
           ),
         ],
@@ -537,6 +576,31 @@ export function createLocalBackend(): Backend {
       save();
       if (!isSales) notify(actor, reviewers(), 'QUOTATION_SUBMITTED', `Revisi penawaran ${number}`, `${qRef(fresh)} · ${formatRupiah(fresh.grandTotal)}`, { quotationId: newId });
       return newId;
+    },
+
+    async addQuotationFollowUp(actor, id, input) {
+      const q = state.quotations.find(x => x.id === id);
+      if (!q) throw new Error('Penawaran tidak ditemukan.');
+      if (!(can(actor, 'quotation:review') || (actor.role === 'SALES' && q.salesId === actor.id))) {
+        throw new Error('Anda tidak memiliki akses untuk meng-update penawaran ini.');
+      }
+      if (q.status !== 'APPROVED' && q.status !== 'PDF_SENT') throw new Error('Update hanya untuk penawaran yang sudah disetujui/terkirim.');
+      const note = input.note.trim();
+      if (input.status === 'LOST' && !input.lostReason) throw new Error('Pilih alasan kalah.');
+      if (input.status === 'CANCELLED' && note.length < 5) throw new Error('Tulis alasan kalah/batal.');
+      if ((input.status === 'WAITING' || input.status === 'NEGOTIATION') && note.length < 5) throw new Error('Tulis perkembangan terbaru minimal 5 karakter.');
+      const at = new Date();
+      const entry: FollowUp = {
+        id: `fu-${at.getTime()}`,
+        status: input.status,
+        note,
+        poValue: input.status === 'WON' && input.poValue ? input.poValue : undefined,
+        lostReason: input.status === 'LOST' ? input.lostReason : undefined,
+        by: actor.name,
+        at: now(),
+        atIso: at.toISOString(),
+      };
+      patchQuotation(id, cur => ({ ...cur, outcome: input.status, followUps: [...(cur.followUps ?? []), entry] }));
     },
 
     async priceCustomRequest(actor, id, patch) {

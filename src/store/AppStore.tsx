@@ -14,6 +14,7 @@ import {
   type NewUserInput,
   type QuotationAdjustments,
   type EscalationDecision,
+  type FollowUpInput,
   type Result,
   type Snapshot,
   type UserPatch,
@@ -97,6 +98,7 @@ interface Store {
   decideCustomRequestEscalation: (id: string, decision: EscalationDecision, note: string, cogs: number, sellingPrice: number) => Promise<void>;
   /** Returns the id of the new revision. */
   createQuotationRevision: (id: string) => Promise<string>;
+  addQuotationFollowUp: (id: string, input: FollowUpInput) => Promise<void>;
 
   addUser: (user: NewUserInput) => Promise<Result>;
   updateUser: (id: string, patch: UserPatch) => Promise<Result>;
@@ -288,6 +290,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     await backend.decideCustomRequestEscalation(actor(), id, decision, note, cogs, sellingPrice);
     await refresh();
   };
+  const addQuotationFollowUp: Store['addQuotationFollowUp'] = async (id, input) => {
+    await backend.addQuotationFollowUp(actor(), id, input);
+    await refresh();
+  };
   const createQuotationRevision: Store['createQuotationRevision'] = async id => {
     const newId = await backend.createQuotationRevision(actor(), id);
     await refresh();
@@ -384,6 +390,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     escalateCustomRequest,
     decideCustomRequestEscalation,
     createQuotationRevision,
+    addQuotationFollowUp,
     addUser,
     updateUser,
     resetDemoData,

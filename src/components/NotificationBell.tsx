@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCheck, FileCheck2, FileClock, FileX2, PackageCheck, PackagePlus, PackageX, ShieldCheck, ShieldQuestion, Tags } from 'lucide-react';
+import { Bell, BellRing, CalendarClock, CheckCheck, FileCheck2, FileClock, FileX2, PackageCheck, PackagePlus, PackageX, ShieldCheck, ShieldQuestion, Tags } from 'lucide-react';
 import type { AppNotification, NotificationType } from '../types';
 import { useStore } from '../store/AppStore';
 import type { Route } from '../App';
@@ -18,6 +18,7 @@ const ICON: Record<NotificationType, { icon: React.ComponentType<{ className?: s
   QUOTATION_MGMT_DECIDED: { icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
   CUSTOM_REQUEST_ESCALATED: { icon: ShieldQuestion, tone: 'bg-violet-50 text-violet-700' },
   CUSTOM_REQUEST_MGMT_DECIDED: { icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
+  FOLLOWUP_REMINDER: { icon: CalendarClock, tone: 'bg-amber-50 text-amber-700' },
 };
 
 function timeAgo(iso: string): string {
@@ -30,7 +31,11 @@ function timeAgo(iso: string): string {
 }
 
 const routeFor = (n: AppNotification): Route =>
-  n.quotationId ? { view: 'quotation-detail', id: n.quotationId } : { view: 'custom-requests' };
+  n.quotationId
+    ? { view: 'quotation-detail', id: n.quotationId }
+    : n.type === 'FOLLOWUP_REMINDER'
+      ? { view: 'quotations' }
+      : { view: 'custom-requests' };
 
 /** Announces notifications that arrive while the app is open: a toast, or a desktop notification when the tab is hidden. */
 export function useArrivalAlerts(notifications: AppNotification[], navigate: (r: Route) => void) {

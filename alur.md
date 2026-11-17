@@ -3,11 +3,19 @@
 Portal internal Agusta untuk menyusun **surat penawaran harga**. Sales menyusun penawaran, Sales Support mereview dan menetapkan harga final, lalu PDF resmi terbit dan dikirim ke WhatsApp Sales.
 
 - **Alamat:** https://agusta-quotation-portal.vercel.app
-- **Status per 17 Nov 2026:** semua fitur di bawah sudah live, termasuk revisi Tahap 1 dari Agusta (lihat [Perubahan terbaru](#0-perubahan-terbaru) dan [revisi.md](revisi.md)). Database pusat (Supabase) dan WhatsApp Business **belum dihubungkan** (lihat [Status integrasi](#7-status-integrasi)).
+- **Status per 17 Nov 2026:** semua fitur di bawah sudah live, termasuk revisi Tahap 1–3 dari Agusta (lihat [Perubahan terbaru](#0-perubahan-terbaru) dan [revisi.md](revisi.md)). Database pusat (Supabase) dan WhatsApp Business **belum dihubungkan** (lihat [Status integrasi](#7-status-integrasi)).
 
 ---
 
 ## 0. Perubahan terbaru
+
+### 17 Nov 2026 — Revisi Tahap 3
+| Untuk | Perubahan |
+|---|---|
+| Sales | **Update perkembangan penawaran** setelah PDF terkirim: Menunggu keputusan · Negosiasi · Menang (PO) · Kalah · Batal. Menang mencatat nilai PO, Kalah wajib alasan. |
+| Sales | Penawaran tanpa update **7 hari** muncul di Beranda (*Perlu update*), filter daftar penawaran, dan badge menu. **Pengingat otomatis setiap Senin 08.00 WIB** (lonceng + WhatsApp). |
+| Management | **Laporan → Success rate**: menang ÷ penawaran yang sudah ada keputusan, per jumlah & per nilai; per Sales, merek, segmen, bulan; alasan kalah; penawaran tanpa update. |
+| Management | **Laporan → Lama penawaran**: durasi tiap tahap dalam jam kerja (Senin–Jumat 08.00–17.00 WIB), % review ≤ 1 hari kerja, per Sales Support, dan daftar penawaran yang sedang menunggu. |
 
 ### 17 Nov 2026 — Revisi Tahap 2
 | Untuk | Perubahan |
@@ -119,12 +127,14 @@ Sales Support dapat **menyembunyikan PPN** (tertulis “Total (belum termasuk PP
 | Penawaran perlu revisi | Sales pengaju | ✅ | ✅* |
 | Request barang custom baru | Sales Support & Management | ✅ | ✅* |
 | Harga custom dihitung / disetujui / ditolak | Sales pengaju | ✅ | ✅* |
+| Diteruskan ke Management / keputusan Management | Management / Sales Support yang meneruskan | ✅ | ✅* |
+| Pengingat mingguan: penawaran perlu update | Sales pemilik (Senin 08.00 WIB) | ✅ | ✅* |
 
 Lonceng menampilkan jumlah belum dibaca, klik langsung membuka penawaran terkait, dan bisa memunculkan notifikasi desktop browser. \*WhatsApp aktif setelah akun WhatsApp Business terhubung.
 
 ### 3.6 Lainnya
-- **Aturan diskon**: atur saran & batas diskon per segmen customer dan jumlah, plus batas margin minimum; ada simulator.
-- **Laporan margin** (Management).
+- **Aturan diskon**: atur saran & batas diskon per merek dan jumlah, plus batas margin minimum; ada simulator.
+- **Laporan** (Management): tab Margin, Success rate, dan Lama penawaran.
 - **User & hak akses** (Management): tambah/ubah user, role, nomor WhatsApp, reset kata sandi, nonaktifkan akun.
 - **Dashboard** per role: pekerjaan yang perlu ditindaklanjuti lebih dulu.
 - **Tidak diindeks Google**: portal internal disembunyikan dari hasil pencarian (noindex).
@@ -176,7 +186,7 @@ Panduan setup teknis lengkap: [docs/backend-setup.md](docs/backend-setup.md).
 |---|---|---|
 | Riset harga pasar (Serper.dev) | ✅ **Aktif** | Kuota gratis 2.500 kredit (±1.250 pencarian). Paket Starter $50 = 50.000 kredit, berlaku 6 bulan |
 | Katalog agusta.co.id | ✅ **Aktif** | — |
-| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 6 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel |
+| Database pusat & login sungguhan (Supabase) | ⏳ Belum | Buat project Supabase, jalankan 7 file migrasi di `supabase/migrations/` (berurutan), isi env di Vercel (termasuk `CRON_SECRET` untuk pengingat mingguan) |
 | WhatsApp Business (Meta) | ⏳ Simulasi | Akun Meta Business terverifikasi, nomor pengirim, 2 template pesan disetujui Meta, token |
 | Sinkron katalog otomatis harian | ⏳ Belum dibuat | Bisa ditambahkan setelah Supabase aktif (saat ini lewat tombol) |
 

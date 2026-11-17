@@ -104,6 +104,8 @@ export interface CustomerInfo {
 
 export interface QuotationEvent {
   at: string;
+  /** ISO instant (analytics). Older events only have the display string. */
+  atIso?: string;
   by: string;
   label: string;
   note?: string;
@@ -136,6 +138,13 @@ export interface Quotation {
   revisionOf?: string;
   revisionNo?: number;
   revisedTo?: string;
+  /** Outcome after the PDF was sent (R13): latest status from the weekly updates. */
+  outcome?: FollowUpStatus;
+  /** Weekly updates by Sales, oldest first (R13). */
+  followUps?: FollowUp[];
+  /** ISO instants for analytics (R8/R13/R14). */
+  createdAtIso?: string;
+  reviewedAtIso?: string;
   taxRatePercent: number;
   taxAmount: number;
   grandTotal: number;
@@ -168,7 +177,8 @@ export type NotificationType =
   | 'QUOTATION_ESCALATED'
   | 'QUOTATION_MGMT_DECIDED'
   | 'CUSTOM_REQUEST_ESCALATED'
-  | 'CUSTOM_REQUEST_MGMT_DECIDED';
+  | 'CUSTOM_REQUEST_MGMT_DECIDED'
+  | 'FOLLOWUP_REMINDER';
 
 export interface AppNotification {
   id: string;
@@ -215,4 +225,20 @@ export interface CustomProductRequest {
   supplier?: { name: string; url?: string; price: number };
   /** Forwarding to Management for special pricing (R7). */
   escalation?: Escalation;
+}
+
+/** R13: what happened with the customer after the quotation was sent. */
+export type FollowUpStatus = 'WAITING' | 'NEGOTIATION' | 'WON' | 'LOST' | 'CANCELLED';
+export type LostReason = 'PRICE' | 'COMPETITOR' | 'BUDGET' | 'SPEC' | 'OTHER';
+
+export interface FollowUp {
+  id: string;
+  status: FollowUpStatus;
+  note: string;
+  /** Value of the purchase order, when won. */
+  poValue?: number;
+  lostReason?: LostReason;
+  by: string;
+  at: string;
+  atIso: string;
 }

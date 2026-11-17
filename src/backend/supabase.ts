@@ -141,9 +141,24 @@ function mapQuotation(r: Row): Quotation {
     revisionOf: r.revision_of ?? undefined,
     revisionNo: r.revision_no ?? 0,
     revisedTo: r.revised_to ?? undefined,
+    outcome: r.outcome ?? undefined,
+    followUps: ((r.quotation_followups ?? []) as Row[])
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+      .map(f => ({
+        id: f.id,
+        status: f.status,
+        note: f.note ?? '',
+        poValue: f.po_value != null ? n(f.po_value) : undefined,
+        lostReason: f.lost_reason ?? undefined,
+        by: f.created_by_name,
+        at: fmt(f.created_at),
+        atIso: f.created_at,
+      })),
+    createdAtIso: r.created_at ?? undefined,
+    reviewedAtIso: r.reviewed_at ?? undefined,
     whatsAppStatus: r.whatsapp_status ?? undefined,
     history: ((r.history ?? []) as Row[]).map(
-      (h): QuotationEvent => ({ at: fmt(h.at), by: h.by, label: h.label, note: h.note ?? undefined })
+      (h): QuotationEvent => ({ at: fmt(h.at), atIso: h.at, by: h.by, label: h.label, note: h.note ?? undefined })
     ),
   };
 }
@@ -322,7 +337,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       const [users, products, quotations, requests, rules, notifications] = await Promise.all([
         sb.from('profiles').select('*').order('created_at'),
         sb.from('products').select('*, product_costs(cogs)').order('created_at'),
-        sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs)), quotation_charges(*)').order('created_at', { ascending: false }),
+        sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs)), quotation_charges(*), quotation_followups(*)').order('created_at', { ascending: false }),
         sb.from('custom_requests').select('*, custom_request_costs(assigned_cogs, supplier_name, supplier_url, supplier_price)').order('submitted_at', { ascending: false }),
         sb.from('discount_rules').select('*').order('position'),
         sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
@@ -446,6 +461,18 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
           p_note: note,
           p_cogs: cogs || null,
           p_selling_price: sellingPrice || null,
+        })
+      );
+    },
+
+    async addQuotationFollowUp(_actor, id, input) {
+      check(
+        await sb.rpc('add_quotation_followup', {
+          p_id: id,
+          p_status: input.status,
+          p_note: input.note,
+          p_po_value: input.poValue ?? null,
+          p_lost_reason: input.lostReason ?? null,
         })
       );
     },

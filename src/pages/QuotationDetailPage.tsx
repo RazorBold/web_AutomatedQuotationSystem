@@ -11,6 +11,7 @@ import type { Route } from '../App';
 import { DiscountInput, RupiahInput } from '../components/DiscountInput';
 import { ChargesEditor, chargesTotal, cleanCharges } from '../components/ChargesEditor';
 import type { ChargeInput, QuotationAdjustments } from '../backend';
+import { FollowUpPanel } from '../components/FollowUpPanel';
 
 const CATEGORY_LABEL = { BUMN_GOV: 'BUMN / Pemerintah', CORPORATE: 'Korporasi', EDUCATION: 'Pendidikan', RETAIL: 'Retail' } as const;
 
@@ -647,6 +648,7 @@ export function QuotationDetailPage({ id, navigate }: { id: string; navigate: (r
               </div>
             )}
             {isReviewer && <EscalationCard q={q} />}
+            {issued && <FollowUpPanel key={`${q.id}-${q.followUps?.length ?? 0}`} q={q} />}
             {canSeeCogs && (
               <Panel title="Data internal" actions={<Badge tone="gray">Tidak dicetak</Badge>}>
                 <dl className="space-y-2 text-[13px]">

@@ -1,5 +1,7 @@
 import React from 'react';
-import { ArrowUpRight, FilePlus2, FileText, Inbox, PackageSearch } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, FilePlus2, FileText, Inbox, PackageSearch } from 'lucide-react';
+import { OutcomeBadge } from '../components/FollowUpPanel';
+import { FOLLOWUP_INTERVAL_DAYS, needsFollowUp } from '../utils/analytics';
 import { useStore } from '../store/AppStore';
 import { can } from '../auth/permissions';
 import { Button, EmptyState, HeroStats, PageHeader, Panel, StatusBadge } from '../components/ui';
@@ -43,7 +45,9 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
   if (!isReviewer) {
     const mine = quotations.filter(q => q.salesId === currentUser.id);
     const rejected = mine.filter(q => q.status === 'REJECTED');
-    const ready = mine.filter(q => q.status === 'APPROVED' || q.status === 'PDF_SENT');
+    // R13: issued quotations without an update for a week come first; the rest stay as "ready".
+    const dueUpdate = mine.filter(q => needsFollowUp(q));
+    const ready = mine.filter(q => (q.status === 'APPROVED' || q.status === 'PDF_SENT') && !q.outcome && !dueUpdate.includes(q));
 
     return (
       <div className="flex flex-col gap-6">
@@ -60,7 +64,7 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
             items={[
               { label: 'Menunggu review', value: mine.filter(q => q.status === 'PENDING_REVIEW').length },
               { label: 'Perlu revisi', value: rejected.length, flag: rejected.length ? 'Tindak lanjuti' : undefined },
-              { label: 'PDF siap dikirim', value: ready.length },
+              { label: 'Perlu update', value: dueUpdate.length, flag: dueUpdate.length ? 'Minggu ini' : undefined },
               { label: 'Nilai disetujui', value: approvedValue(mine) },
             ]}
           />
@@ -68,7 +72,7 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
 
         <div className="grid gap-6 xl:grid-cols-[3fr_2fr]">
           <Panel title="Perlu tindakan Anda" bodyClassName="">
-            {rejected.length + ready.length === 0 ? (
+            {rejected.length + ready.length + dueUpdate.length === 0 ? (
               <EmptyState
                 icon={<Inbox className="size-5" />}
                 title="Tidak ada yang menunggu Anda"
@@ -76,6 +80,25 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
               />
             ) : (
               <ul className="divide-y divide-line">
+                {dueUpdate.map(q => (
+                  <li key={q.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-ink">{q.customer.companyName}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
+                          <CalendarClock className="size-3.5" /> Perlu update
+                        </span>
+                        <OutcomeBadge q={q} />
+                      </div>
+                      <p className="mt-0.5 text-[13px] text-ink-3">
+                        <span className="font-mono">{q.quotationNumber}</span> · {formatRupiah(q.grandTotal)} · belum ada kabar lebih dari {FOLLOWUP_INTERVAL_DAYS} hari
+                      </p>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => open(q.id)}>
+                      Update perkembangan
+                    </Button>
+                  </li>
+                ))}
                 {rejected.map(q => (
                   <li key={q.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">

@@ -4,12 +4,19 @@ import { useStore } from '../store/AppStore';
 import { can } from '../auth/permissions';
 import { Button, EmptyState, Input, PageHeader, Panel, Segmented } from '../components/ui';
 import { QuotationTable } from '../components/QuotationTable';
-import type { QuotationStatus } from '../types';
+import type { Quotation } from '../types';
+import { needsFollowUp } from '../utils/analytics';
 import type { Route } from '../App';
 
-type Filter = 'ALL' | 'PENDING_REVIEW' | 'PENDING_MANAGEMENT' | 'DONE' | 'REJECTED' | 'DRAFT' | 'REVISED';
-const matches = (f: Filter, s: QuotationStatus) =>
-  f === 'ALL' ? s !== 'REVISED' : f === 'DONE' ? s === 'APPROVED' || s === 'PDF_SENT' : s === f;
+type Filter = 'ALL' | 'PENDING_REVIEW' | 'PENDING_MANAGEMENT' | 'DONE' | 'REJECTED' | 'DRAFT' | 'REVISED' | 'FOLLOWUP';
+const matches = (f: Filter, q: Quotation) =>
+  f === 'ALL'
+    ? q.status !== 'REVISED'
+    : f === 'DONE'
+      ? q.status === 'APPROVED' || q.status === 'PDF_SENT'
+      : f === 'FOLLOWUP'
+        ? needsFollowUp(q)
+        : q.status === f;
 
 export function QuotationsPage({ navigate }: { navigate: (r: Route) => void }) {
   const { currentUser, quotations } = useStore();
@@ -28,14 +35,14 @@ export function QuotationsPage({ navigate }: { navigate: (r: Route) => void }) {
   const list = scoped.filter(q => {
     const t = query.trim().toLowerCase();
     return (
-      matches(filter, q.status) &&
+      matches(filter, q) &&
       (!t ||
         q.quotationNumber.toLowerCase().includes(t) ||
         q.customer.companyName.toLowerCase().includes(t) ||
         q.salesName.toLowerCase().includes(t))
     );
   });
-  const count = (f: Filter) => scoped.filter(q => matches(f, q.status)).length;
+  const count = (f: Filter) => scoped.filter(q => matches(f, q)).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,6 +76,7 @@ export function QuotationsPage({ navigate }: { navigate: (r: Route) => void }) {
                 { value: 'PENDING_REVIEW', label: 'Menunggu review', count: count('PENDING_REVIEW') },
                 { value: 'REJECTED', label: 'Perlu revisi', count: count('REJECTED') },
                 ...(!isReviewer && count('DRAFT') ? [{ value: 'DRAFT' as Filter, label: 'Draf revisi', count: count('DRAFT') }] : []),
+                ...(count('FOLLOWUP') ? [{ value: 'FOLLOWUP' as Filter, label: 'Perlu update', count: count('FOLLOWUP') }] : []),
                 { value: 'DONE', label: 'Disetujui', count: count('DONE') },
                 ...(count('REVISED') ? [{ value: 'REVISED' as Filter, label: 'Arsip revisi', count: count('REVISED') }] : []),
                 { value: 'ALL', label: 'Semua', count: count('ALL') },

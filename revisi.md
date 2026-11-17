@@ -5,7 +5,7 @@ Update file ini setiap ada progres (centang `[x]`, ubah status, isi kolom keputu
 
 **Legenda status:** ✅ Selesai · 🟡 Sebagian · 🔨 Dikerjakan · ⏳ Menunggu keputusan/data · ❌ Belum
 
-_Terakhir diperbarui: 17 Nov 2026 — Tahap 1 & Tahap 2 selesai; berikutnya Tahap 3 (R13, R14, R8)_
+_Terakhir diperbarui: 17 Nov 2026 — Tahap 1, 2 & 3 selesai; berikutnya Tahap 4 (R10, R9, menunggu data supplier)_
 
 ---
 
@@ -20,15 +20,15 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1 & Tahap 2 selesai; berikutnya Taha
 | R5 | Revisi penawaran yang sudah jadi | Sales Support | ✅ Selesai | 2 | Konfirmasi Q5 (pakai usulan default) |
 | R6 | Biaya tambahan jasa pasang & ongkir | Sales Support | ✅ Selesai | 2 | Konfirmasi Q6 (pakai usulan default) |
 | R7 | Eskalasi ke Management (diskon di luar standar & harga custom khusus) | Sales Support | ✅ Selesai | 2 | Konfirmasi sisa Q7 |
-| R8 | Analisa lama penawaran | Management | ❌ Belum | 3 | Data Q8 |
+| R8 | Analisa lama penawaran | Management | ✅ Selesai | 3 | Konfirmasi Q8 (pakai usulan default) |
 | R9 | Update harga dari PDF supplier ke master data | General | ❌ Belum | 4 | Data Q9 |
 | R10 | Produk custom dicari ke website supplier (selain e-commerce) | General | 🟡 Sebagian | 4 | Data Q10 |
 | R11 | "Target harga per unit" diganti **Pagu / anggaran** | Sales | ✅ Selesai | 2 | Konfirmasi Q11 (pakai usulan default) |
 | R12 | Aturan diskon **per merek** (bukan per segmen) | Sales Support | ✅ Selesai | 2 | **Angka diskon per merek dari Agusta (Q12)** — sekarang angka sementara |
-| R13 | Sales update perkembangan penawaran **seminggu sekali** | Sales | ❌ Belum | 3 | Q13 |
-| R14 | Analisis **success rate** penawaran | Management | ❌ Belum | 3 | Q14 (butuh R13) |
+| R13 | Sales update perkembangan penawaran **seminggu sekali** | Sales | ✅ Selesai | 3 | Konfirmasi Q13 (pakai usulan default) |
+| R14 | Analisis **success rate** penawaran | Management | ✅ Selesai | 3 | Konfirmasi Q14 (pakai usulan default) |
 
-**Progres:** 9 dari 14 selesai (Tahap 1 & 2).
+**Progres:** 12 dari 14 selesai (Tahap 1, 2 & 3). Sisa: R9 & R10 (Tahap 4).
 
 ---
 
@@ -124,10 +124,12 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1 & Tahap 2 selesai; berikutnya Taha
 - **Kondisi sekarang:** waktu tiap tahap sudah tercatat di riwayat penawaran, tetapi belum diolah. Laporan yang ada baru margin per Sales & per segmen.
 - **Rencana:** bagian baru di **Laporan**: rata-rata & median durasi tiap tahap, per Sales dan per Sales Support, penawaran yang paling lama mengendap, tren per bulan, pencapaian target (SLA).
 - **Butuh dari Agusta:** Q8
+- **Hasil:** tab **Lama penawaran** di Laporan. Durasi dihitung dalam **jam kerja** (Senin–Jumat 08.00–17.00 WIB, 1 hari kerja = 9 jam): diajukan → keputusan Sales Support, diteruskan → keputusan Management, disetujui → dikirim ke WhatsApp, dan total diajukan pertama → terbit. Rata-rata, median, dan % review ≤ 1 hari kerja; per Sales Support; daftar penawaran yang sedang menunggu (merah bila lewat target).
 - **Langkah:**
-  - [ ] Hitung durasi tiap tahap dari riwayat
-  - [ ] Tabel & grafik di halaman Laporan
-  - [ ] Daftar penawaran melewati target
+  - [x] Hitung durasi tiap tahap dari riwayat
+  - [x] Tabel di halaman Laporan
+  - [x] Daftar penawaran melewati target
+  - [x] Uji
   - [ ] Uji dengan data contoh
 
 ### R9 — Update harga dari PDF supplier ke master data
@@ -178,21 +180,23 @@ _Terakhir diperbarui: 17 Nov 2026 — Tahap 1 & Tahap 2 selesai; berikutnya Taha
 - **Kondisi sekarang:** setelah PDF terkirim, penawaran berhenti di status *Terkirim*. Tidak ada catatan tindak lanjut.
 - **Rencana:** di penawaran yang sudah terkirim, Sales mengisi **Update** (status + catatan): *Menunggu keputusan · Negosiasi · Menang (PO) · Kalah · Batal*. Kalah/Batal wajib alasan; Menang mencatat nilai PO. **Pengingat mingguan** (lonceng + WhatsApp) untuk penawaran yang belum di-update 7 hari. Daftar "Perlu update" di Beranda Sales.
 - **Butuh dari Agusta:** Q13
+- **Hasil:** panel **Perkembangan penawaran** di halaman penawaran yang sudah disetujui/terkirim (Sales pemilik, Sales Support, Management). Penawaran tanpa update 7 hari muncul di Beranda Sales ("Perlu update"), filter *Perlu update* di daftar penawaran, dan badge menu. Pengingat otomatis setiap **Senin 08.00 WIB** (Vercel Cron → lonceng → WhatsApp). Penawaran berhenti dipantau setelah Menang/Kalah/Batal. Buat revisi mereset status.
 - **Langkah:**
-  - [ ] Data update penawaran (status, catatan, nilai PO, alasan) + riwayat
-  - [ ] Form update di halaman penawaran (Sales)
-  - [ ] Daftar "Perlu update minggu ini" di Beranda Sales
-  - [ ] Pengingat mingguan otomatis (lonceng + WhatsApp)
-  - [ ] Uji
+  - [x] Data update penawaran (status, catatan, nilai PO, alasan) + riwayat
+  - [x] Form update di halaman penawaran (Sales)
+  - [x] Daftar "Perlu update minggu ini" di Beranda Sales
+  - [x] Pengingat mingguan otomatis (lonceng + WhatsApp)
+  - [x] Uji
 
 ### R14 — Analisis success rate penawaran (Management)
 - **Kondisi sekarang:** laporan baru margin per Sales & per segmen.
 - **Rencana:** di Laporan: **success rate** (menang ÷ penawaran yang sudah ada hasil), nilai menang vs nilai ditawarkan, per **Sales / merek / segmen / bulan**, alasan kalah terbanyak, dan penawaran yang lama tanpa update. Digabung dengan R8 (lama penawaran).
 - **Butuh dari Agusta:** Q14. Datanya berasal dari R13.
+- **Hasil:** tab **Success rate** di Laporan. Success rate = Menang ÷ (Menang + Kalah + Batal), ditampilkan per jumlah dan per nilai (nilai PO bila diisi, selain itu nilai penawaran). Per Sales, per merek, per segmen, per bulan terbit; alasan kalah; daftar penawaran tanpa update > 7 hari.
 - **Langkah:**
-  - [ ] Hitung success rate & nilai menang
-  - [ ] Tabel/grafik per Sales, merek, segmen, bulan
-  - [ ] Alasan kalah & penawaran tanpa update
+  - [x] Hitung success rate & nilai menang
+  - [x] Tabel per Sales, merek, segmen, bulan
+  - [x] Alasan kalah & penawaran tanpa update
   - [ ] Uji dengan data contoh
 
 ---
@@ -237,6 +241,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 
 | Tanggal | Revisi | Catatan |
 |---|---|---|
+| 17 Nov 2026 | R13, R14, R8 | **Tahap 3 selesai.** Memakai usulan default Q8, Q13, Q14 (mohon dikonfirmasi). Database: migrasi `20261119000000_tahap3_followup.sql`; env baru `CRON_SECRET` untuk pengingat mingguan. Diuji: 33 unit test, database (PGlite, termasuk regresi 6 migrasi sebelumnya), dan alur di browser (Sales update → Management lihat laporan). |
 | 17 Nov 2026 | R5, R6, R7, R11, R12 | **Tahap 2 live di production** (commit `2341037`, Vercel *Ready*). Memakai usulan default Q5, Q6, sisa Q7, Q11; **angka aturan diskon per merek masih sementara (Q12)**. Database: migrasi `20261118000000_tahap2_workflow.sql`. Diuji: 28 unit test, database (PGlite, termasuk regresi 5 migrasi sebelumnya), dan alur di browser dengan 3 role. |
 | 17 Nov 2026 | R7, R11–R14 | **Masukan ke-2 dari Agusta:** alur eskalasi Management diperjelas (R7, Q7 sebagian terjawab); baru: pagu/anggaran (R11), aturan diskon per merek (R12), update mingguan Sales (R13), analisis success rate (R14). |
 | 17 Nov 2026 | R1–R4 | **Tahap 1 live di production** (commit `ed4d730`, Vercel *Ready*): https://agusta-quotation-portal.vercel.app |

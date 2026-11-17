@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AgustaLogo } from './AgustaLogo';
 import { NotificationBell, useArrivalAlerts } from './NotificationBell';
+import { needsFollowUp } from '../utils/analytics';
 import { Avatar, IconButton, cx } from './ui';
 import { useStore } from '../store/AppStore';
 import { can, Permission, ROLE_META } from '../auth/permissions';
@@ -38,7 +39,10 @@ export function Shell({ route, navigate, children }: { route: Route; navigate: (
   // Each role counts what waits for *them*: Management handles escalations (R7).
   const isManagement = currentUser.role === 'MANAGEMENT';
   const pendingReview = quotations.filter(q => q.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_REVIEW')).length;
-  const needsRevision = quotations.filter(q => q.salesId === currentUser.id && (q.status === 'REJECTED' || q.status === 'DRAFT')).length;
+  // Sales: returned/draft quotations plus issued ones that need this week's update (R13).
+  const needsRevision = quotations.filter(
+    q => q.salesId === currentUser.id && (q.status === 'REJECTED' || q.status === 'DRAFT' || needsFollowUp(q))
+  ).length;
   const pendingPricing = customRequests.filter(r => r.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_PRICING')).length;
 
   const groups: { label: string; items: NavItem[] }[] = [
@@ -68,7 +72,7 @@ export function Shell({ route, navigate, children }: { route: Route; navigate: (
       items: [
         { id: 'catalog', label: 'Katalog produk', icon: Boxes, show: h => h('catalog:view') },
         { id: 'discount-rules', label: 'Aturan diskon', icon: Percent, show: h => h('discount-rules:edit') },
-        { id: 'reports', label: 'Laporan margin', icon: BarChart3, show: h => h('reports:view') },
+        { id: 'reports', label: 'Laporan', icon: BarChart3, show: h => h('reports:view') },
       ],
     },
     {

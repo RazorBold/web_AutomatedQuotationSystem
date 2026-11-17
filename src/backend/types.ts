@@ -1,4 +1,4 @@
-import type { AppNotification, CustomProductRequest, CustomerInfo, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, CustomProductRequest, CustomerInfo, FollowUpStatus, LostReason, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
@@ -37,6 +37,14 @@ export interface QuotationAdjustments {
 }
 
 export type EscalationDecision = 'APPROVED' | 'RETURNED';
+
+/** R13: weekly update by Sales on an issued quotation. */
+export interface FollowUpInput {
+  status: FollowUpStatus;
+  note: string;
+  poValue?: number;
+  lostReason?: LostReason;
+}
 
 export type NewCustomRequestInput = Pick<
   CustomProductRequest,
@@ -86,6 +94,8 @@ export interface Backend {
   decideCustomRequestEscalation(actor: UserProfile, id: string, decision: EscalationDecision, note: string, cogs: number, sellingPrice: number): Promise<void>;
   /** R5: new version (-R1, -R2 …) of an issued quotation; returns its id. */
   createQuotationRevision(actor: UserProfile, id: string): Promise<string>;
+  /** R13: record what happened with the customer. */
+  addQuotationFollowUp(actor: UserProfile, id: string, input: FollowUpInput): Promise<void>;
 
   addUser(actor: UserProfile, input: NewUserInput): Promise<Result>;
   updateUser(actor: UserProfile, id: string, patch: UserPatch): Promise<Result>;

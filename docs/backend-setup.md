@@ -14,13 +14,14 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
 ## 1. Buat project Supabase
 
 1. Daftar di <https://supabase.com>, lalu **New project**. Pilih region **Southeast Asia (Singapore)**.
-2. Buka **SQL Editor → New query**, lalu jalankan dua file migrasi **berurutan** (tempel isinya, klik **Run**):
+2. Buka **SQL Editor → New query**, lalu jalankan file migrasi berikut **berurutan** (tempel isinya, klik **Run**):
    1. `supabase/migrations/20261109000000_init.sql`: tabel, aturan akses (RLS), fungsi persetujuan, bucket PDF `quotations`, realtime.
    2. `supabase/migrations/20261110000000_notifications.sql`: notifikasi di portal (lonceng), dibuat otomatis oleh trigger.
    3. `supabase/migrations/20261111000000_agusta_catalog.sql`: katalog diselaraskan dengan agusta.co.id (impor produk, foto & link di request, produk tanpa harga tidak bisa dipakai di penawaran).
    4. `supabase/migrations/20261112000000_supplier_research.sql`: acuan supplier dari riset harga pasar (hanya terlihat oleh Sales Support & Management).
    5. `supabase/migrations/20261117000000_quote_options.sql`: diskon tambahan (Rp) dan pengaturan tampil/sembunyikan PPN & diskon di PDF.
    6. `supabase/migrations/20261118000000_tahap2_workflow.sql`: pagu/anggaran barang custom, aturan diskon per merek, biaya tambahan, eskalasi ke Management, revisi penawaran (-R1, -R2).
+   7. `supabase/migrations/20261119000000_tahap3_followup.sql`: update perkembangan penawaran oleh Sales (status, nilai PO, alasan kalah) dan fungsi pengingat mingguan.
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`
@@ -120,6 +121,9 @@ Status WhatsApp penawaran akan ikut berubah: `SENT → DELIVERED → READ`, atau
 | Penawaran dikembalikan untuk revisi | Sales pengaju | ✅ | ✅ |
 | Request barang custom baru | Semua Sales Support & Management | ✅ | ✅ |
 | Harga custom dihitung / disetujui / ditolak | Sales pengaju | ✅ | ✅ |
+| Diteruskan ke Management | Semua Management | ✅ | ✅ |
+| Keputusan Management | Sales Support yang meneruskan | ✅ | ✅ |
+| Pengingat mingguan: penawaran perlu update | Sales pemilik penawaran | ✅ | ✅ |
 
 Pelaku aksi tidak menerima notifikasi atas aksinya sendiri. Notifikasi di portal muncul seketika (realtime). Jika tab portal sedang tidak dibuka, notifikasi desktop browser juga bisa diaktifkan dari panel lonceng.
 
@@ -141,6 +145,14 @@ Pelaku aksi tidak menerima notifikasi atas aksinya sendiri. Notifikasi di portal
 4. Hasil tiap pengiriman tercatat di kolom `notifications.whatsapp_status` (`SENT`, `SIMULATED`, `SKIPPED`, `FAILED` + `whatsapp_error`).
 
 Untuk memilih jenis yang dikirim ke WhatsApp, isi `WHATSAPP_NOTIFY_TYPES`, contoh `QUOTATION_SUBMITTED,QUOTATION_REJECTED`. Isi `none` untuk mematikan semuanya.
+
+### Pengingat mingguan update penawaran
+Vercel Cron memanggil `/api/followup-reminders` setiap **Senin 01.00 UTC (08.00 WIB)** (lihat `vercel.json`). Setiap Sales yang punya penawaran terbit tanpa update 7 hari menerima satu notifikasi berisi daftar penawarannya; notifikasi itu ikut diteruskan ke WhatsApp lewat webhook di atas.
+
+1. Isi env `CRON_SECRET` di Vercel (string acak minimal 16 karakter), lalu deploy ulang. Vercel otomatis mengirim `Authorization: Bearer <CRON_SECRET>`; permintaan tanpa header itu ditolak (401).
+2. Coba manual: `curl -H "Authorization: Bearer <CRON_SECRET>" https://<domain-anda>/api/followup-reminders` → `{"ok":true,"reminded":<jumlah Sales>}`.
+
+Di mode demo (tanpa Supabase) pengingat dibuat saat Sales login, maksimal sekali per 7 hari.
 
 ## 8. Katalog dari agusta.co.id
 
