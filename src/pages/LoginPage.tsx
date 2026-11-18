@@ -22,7 +22,7 @@ export function LoginPage() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setError('Isi email kantor dan kata sandi untuk masuk.');
+      setError('Isi kode user dan kata sandi untuk masuk.');
       return;
     }
     setLoading(true);
@@ -50,16 +50,18 @@ export function LoginPage() {
           </p>
 
           <form onSubmit={submit} className="mt-8 flex flex-col gap-5" noValidate>
-            <Field label="Email kantor">
+            <Field label="Kode user" hint="Kode dari Management, mis. ISM. Bisa juga pakai email kantor.">
               {p => (
                 <Input
                   {...p}
-                  type="email"
+                  type="text"
                   autoComplete="username"
-                  placeholder="nama@agusta.co.id"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  placeholder="mis. ISM"
                   value={email}
                   onChange={e => {
-                    setEmail(e.target.value);
+                    setEmail(e.target.value.includes('@') ? e.target.value : e.target.value.toUpperCase());
                     setError(null);
                   }}
                 />
@@ -112,18 +114,18 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setEmail(u!.email);
+                      setEmail(u!.quoteCode ?? u!.email);
                       setPassword('agusta123');
                       setError(null);
                     }}
                     className={cx(
                       'flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-canvas cursor-pointer',
-                      email === u!.email && 'bg-link-soft/60'
+                      email === (u!.quoteCode ?? u!.email) && 'bg-link-soft/60'
                     )}
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-semibold text-ink">{u!.name}</span>
-                      <span className="block truncate text-xs text-ink-3">{u!.email}</span>
+                      <span className="block truncate text-xs text-ink-3">Kode {u!.quoteCode ?? '-'} · {u!.email}</span>
                     </span>
                     <span className="shrink-0 text-xs font-semibold text-link">{ROLE_META[u!.role].label}</span>
                   </button>

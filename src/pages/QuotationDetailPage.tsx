@@ -158,6 +158,8 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
     charges: initialCharges,
   });
 
+  /** Management (tafsiran A): read-only prices, no letter, discount or PPN settings. */
+  const mgmt = mode === 'management';
   const charges = cleanCharges(adj.charges);
   const totals = calculateQuotationTotals(items, true, 11, adj.extraDiscount, chargesTotal(charges));
   // Rules follow each item's brand (R12): margin floor and maximum discount per line.
@@ -245,7 +247,7 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
     } else if (panel === 'return') {
       if (!needReason(5, 'Tulis catatan untuk Sales Support.')) return;
       void run('return', async () => {
-        await decideQuotationEscalation(q.id, 'RETURNED', reason.trim(), items, adjustments);
+        await decideQuotationEscalation(q.id, 'RETURNED', reason.trim(), items);
         notify(`${q.quotationNumber} dikembalikan ke Sales Support.`, 'info');
         navigate({ view: 'quotations' });
       });
@@ -254,7 +256,7 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
 
   const managementApprove = () =>
     run('approve', async () => {
-      await decideQuotationEscalation(q.id, 'APPROVED', reason.trim(), items, adjustments);
+      await decideQuotationEscalation(q.id, 'APPROVED', reason.trim(), items);
       notify(`Harga ${q.quotationNumber} disetujui. Sales Support akan menerbitkan PDF final.`);
       navigate({ view: 'quotations' });
     });
@@ -287,6 +289,39 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
           </div>
         )}
 
+        {mgmt ? (
+          <Panel title="Harga final per item" description="Harga yang diajukan Sales Support, sudah termasuk diskon. Belum termasuk PPN." bodyClassName="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-line text-xs text-ink-3">
+                  <th className="px-5 py-2.5 font-medium">Produk</th>
+                  <th className="w-28 px-2 py-2.5 text-right font-medium">HPP / unit</th>
+                  <th className="w-32 px-2 py-2.5 text-right font-medium">Harga final / unit</th>
+                  <th className="w-32 px-2 py-2.5 text-right font-medium">Jumlah</th>
+                  <th className="w-24 px-4 py-2.5 text-right font-medium">Margin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {lines.map(({ it, safety, overMax: over, subtotal }) => (
+                  <tr key={it.id} className={cx('align-top', (!safety.isSafe || over) && 'bg-brand-soft/40')}>
+                    <td className="px-5 py-3">
+                      <p className="font-semibold leading-snug text-ink">{it.productName}</p>
+                      <p className="text-xs text-ink-3">
+                        {it.qty} {it.unit}
+                      </p>
+                    </td>
+                    <td className="px-2 py-3 text-right tabular-nums text-ink-2">{formatRupiah(it.cogs)}</td>
+                    <td className="px-2 py-3 text-right font-semibold tabular-nums text-ink">{formatRupiah(it.qty ? Math.round(subtotal / it.qty) : 0)}</td>
+                    <td className="px-2 py-3 text-right font-semibold tabular-nums text-ink">{formatRupiah(subtotal)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <MarginValue value={safety.currentMarginPercent} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+        ) : (
         <Panel
           title="Item, HPP & harga final"
           description="Margin per item dihitung dari harga setelah diskon. Batas diskon & margin mengikuti aturan merek."
@@ -346,11 +381,28 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
             </tbody>
           </table>
         </Panel>
+        )}
 
+        {mgmt ? (
+          charges.length > 0 && (
+            <Panel title="Jasa & biaya tambahan">
+              <ChargesEditor charges={adj.charges} onChange={() => undefined} readOnly />
+            </Panel>
+          )
+        ) : (
         <Panel title="Jasa & biaya tambahan" description="Jasa pasang, pengiriman, testing, dan sebagainya. Dicetak sebagai baris bernomor di tabel. Centang Termasuk bila tanpa biaya. Kena PPN, tidak kena diskon, tidak dihitung di margin.">
           <ChargesEditor charges={adj.charges} onChange={c => setAdj(a => ({ ...a, charges: c }))} />
         </Panel>
+        )}
 
+        {mgmt ? (
+          q.supportNotes && (
+            <div className="rounded-[14px] border border-line/80 bg-surface px-5 py-4 shadow-card">
+              <p className="text-[13px] font-semibold text-ink">Catatan Sales Support</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{q.supportNotes}</p>
+            </div>
+          )
+        ) : (
         <Panel title="Catatan Sales Support" description="Ikut tersimpan di riwayat. Tidak dicetak di PDF.">
           <Textarea
             aria-label="Catatan Sales Support"
@@ -360,10 +412,29 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
             placeholder="Contoh: Harga Lenovo mengikuti promo distributor sampai 30 Nov."
           />
         </Panel>
+        )}
       </div>
 
       <aside className="flex flex-col gap-6 xl:sticky xl:top-0 xl:self-start">
         <Panel title="Ringkasan">
+          {mgmt ? (
+            <dl className="space-y-2 text-[13px]">
+              <div className="flex justify-between">
+                <dt className="text-ink-2">Harga barang</dt>
+                <dd className="tabular-nums text-ink">{formatRupiah(totals.goodsSubtotal)}</dd>
+              </div>
+              {totals.chargesTotal > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-ink-2">Jasa &amp; biaya</dt>
+                  <dd className="tabular-nums text-ink">{formatRupiah(totals.chargesTotal)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-line pt-2 text-[15px] font-semibold">
+                <dt className="text-ink">Total (sebelum PPN)</dt>
+                <dd className="tabular-nums text-ink">{formatRupiah(totals.subtotal)}</dd>
+              </div>
+            </dl>
+          ) : (
           <dl className="space-y-2 text-[13px]">
             <div className="flex justify-between">
               <dt className="text-ink-2">Total item</dt>
@@ -400,6 +471,7 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
               <dd className="tabular-nums text-ink">{formatRupiah(totals.grandTotal)}</dd>
             </div>
           </dl>
+          )}
           <dl className="mt-4 space-y-2 rounded-lg bg-canvas p-3.5 text-[13px]">
             <div className="flex justify-between">
               <dt className="text-ink-2">Total HPP</dt>
@@ -417,12 +489,14 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
             </div>
           </dl>
 
+          {!mgmt && (
           <details className="group mt-4 rounded-lg border border-line" open>
             <summary className="cursor-pointer list-none px-3.5 py-2.5 text-[13px] font-semibold text-ink marker:hidden">Format surat</summary>
             <div className="border-t border-line px-3.5 py-3.5">
               <LetterEditor value={adj.letter} onChange={l => setAdj(a => ({ ...a, letter: l }))} />
             </div>
           </details>
+          )}
 
           {mode === 'review' && needsManagement && (
             <div className="mt-4 rounded-lg bg-violet-50 px-3.5 py-3 text-[13px] text-violet-900">

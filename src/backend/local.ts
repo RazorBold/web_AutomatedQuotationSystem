@@ -252,11 +252,13 @@ export function createLocalBackend(): Backend {
       return () => undefined;
     },
 
-    async login(email, password) {
+    async login(identifier, password) {
       await new Promise(r => setTimeout(r, 350));
-      const user = state.users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      const id = identifier.trim().toLowerCase();
+      // Kode user (ISM, RZK, …) or, as a fallback, the email address.
+      const user = state.users.find(u => (id.includes('@') ? u.email.toLowerCase() === id : (u.quoteCode ?? '').toLowerCase() === id));
       if (!user || user.password !== password) {
-        return { ok: false, error: 'Email atau kata sandi tidak cocok. Periksa kembali, lalu coba lagi.' };
+        return { ok: false, error: 'Kode user atau kata sandi tidak cocok. Periksa kembali, lalu coba lagi.' };
       }
       if (user.status !== 'ACTIVE') {
         return { ok: false, error: 'Akun ini sedang dinonaktifkan. Hubungi Management untuk mengaktifkannya.' };
@@ -804,7 +806,9 @@ export function createLocalBackend(): Backend {
     async setQuoteCode(actor, userId, code, lastNo) {
       if (!can(actor, 'users:manage')) throw new Error('Hanya Management yang dapat mengatur kode surat.');
       const c = code.trim().toUpperCase();
-      if (c && !/^[A-Z]{2,5}$/.test(c)) throw new Error('Kode surat 2–5 huruf, mis. FHM.');
+      if (c && !/^[A-Z]{2,5}$/.test(c)) throw new Error('Kode user 2–5 huruf, mis. FHM.');
+      const owner = c && state.users.find(u => u.quoteCode === c && u.id !== userId);
+      if (owner) throw new Error(`Kode ${c} sudah dipakai ${owner.name}.`);
       state = { ...state, users: state.users.map(u => (u.id === userId ? { ...u, quoteCode: c || undefined } : u)) };
       if (lastNo !== undefined) {
         const u = state.users.find(x => x.id === userId);
@@ -827,6 +831,8 @@ export function createLocalBackend(): Backend {
       if (state.users.some(u => u.email.toLowerCase() === input.email.trim().toLowerCase())) {
         return { ok: false, error: 'Email ini sudah dipakai akun lain.' };
       }
+      const codeOwner = input.quoteCode && state.users.find(u => u.quoteCode === input.quoteCode);
+      if (codeOwner) return { ok: false, error: `Kode ${input.quoteCode} sudah dipakai ${codeOwner.name}.` };
       state = {
         ...state,
         users: [...state.users, { ...input, email: input.email.trim(), id: `user-${Date.now()}`, avatar: initials(input.name), createdAt: now(false) }],

@@ -23,7 +23,7 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
   const effectiveCode = code.trim().toUpperCase() || (user && /^[A-Z]{2,5}$/.test(user.avatar) ? user.avatar : 'AG');
   const isNew = !user;
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'form', string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'form' | 'code', string>>>({});
   const [resetPw, setResetPw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
@@ -52,8 +52,10 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
     if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Isi email kantor yang valid, contoh: nama@agusta.co.id';
     if (form.phone.replace(/\D/g, '').length < 9) e.phone = 'Isi nomor WhatsApp aktif. Notifikasi PDF dikirim ke nomor ini.';
     if ((isNew || resetPw) && form.password.length < 8) e.password = 'Kata sandi minimal 8 karakter.';
-    const codeChanged = !isNew && form.role === 'SALES' && (code.trim().toUpperCase() !== (user?.quoteCode ?? '') || lastNo.trim() !== '');
-    if (codeChanged && code.trim() && !/^[A-Za-z]{2,5}$/.test(code.trim())) e.form = 'Kode surat 2–5 huruf, mis. FHM.';
+    const codeValue = code.trim().toUpperCase();
+    const codeChanged = !isNew && (codeValue !== (user?.quoteCode ?? '') || (form.role === 'SALES' && lastNo.trim() !== ''));
+    if (isNew && !codeValue) e.code = 'Isi kode user. Kode ini dipakai untuk login.';
+    else if (codeValue && !/^[A-Z]{2,5}$/.test(codeValue)) e.code = 'Kode user 2–5 huruf, mis. FHM.';
     setErrors(e);
     if (Object.keys(e).length) return;
 
@@ -61,7 +63,7 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
     const { password, ...profile } = payload;
     setSaving(true);
     const res = await (isNew
-      ? addUser(payload)
+      ? addUser({ ...payload, quoteCode: codeValue })
       : updateUser(user!.id, resetPw ? payload : profile)
     ).catch(err => ({ ok: false as const, error: errorMessage(err) }));
     setSaving(false);
@@ -71,7 +73,7 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
     }
     if (codeChanged) {
       try {
-        await setQuoteCode(user!.id, code, lastNo.trim() === '' ? undefined : Number(lastNo));
+        await setQuoteCode(user!.id, codeValue, form.role === 'SALES' && lastNo.trim() !== '' ? Number(lastNo) : undefined);
       } catch (err) {
         setErrors({ form: errorMessage(err) });
         return;
@@ -158,20 +160,32 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
             </div>
           </fieldset>
 
-          {form.role === 'SALES' && !isNew && (
-            <fieldset className="rounded-lg border border-line px-3.5 py-3">
-              <legend className="px-1 text-[13px] font-semibold text-ink">Nomor surat penawaran</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Kode surat" optional hint={`Contoh nomor: 0001/${effectiveCode}/AG/…`}>
-                  {p => <Input {...p} value={code} maxLength={5} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))} placeholder={user?.avatar || 'FHM'} />}
-                </Field>
-                <Field label={`Nomor terakhir ${new Date().getFullYear()}`} optional hint={`Saat ini ${counters[effectiveCode] ?? 0}. Isi bila nomor manual sudah lebih jauh.`}>
-                  {p => <Input {...p} inputMode="numeric" value={lastNo} onChange={e => setLastNo(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder={String(counters[effectiveCode] ?? 0)} />}
-                </Field>
-              </div>
-            </fieldset>
-          )}
-
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Kode user"
+              error={errors.code}
+              hint={!errors.code ? (form.role === 'SALES' ? `Untuk login, dan di nomor surat: 0001/${effectiveCode}/AG/…` : 'Untuk login, mis. RZK.') : undefined}
+            >
+              {p => (
+                <Input
+                  {...p}
+                  value={code}
+                  maxLength={5}
+                  autoCapitalize="characters"
+                  onChange={e => {
+                    setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''));
+                    setErrors(x => ({ ...x, code: undefined, form: undefined }));
+                  }}
+                  placeholder={user?.avatar || 'FHM'}
+                />
+              )}
+            </Field>
+            {form.role === 'SALES' && !isNew && (
+              <Field label={`Nomor surat terakhir ${new Date().getFullYear()}`} optional hint={`Saat ini ${counters[effectiveCode] ?? 0}. Isi bila nomor manual sudah lebih jauh.`}>
+                {p => <Input {...p} inputMode="numeric" value={lastNo} onChange={e => setLastNo(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder={String(counters[effectiveCode] ?? 0)} />}
+              </Field>
+            )}
+          </div>
           {isNew || resetPw ? (
             <Field label={isNew ? 'Kata sandi sementara' : 'Kata sandi baru'} error={errors.password} hint={!errors.password ? 'Minta user menggantinya setelah masuk pertama kali.' : undefined}>
               {p => (
@@ -311,7 +325,7 @@ export function UsersPage() {
     return (
       (role === 'ALL' || u.role === role) &&
       (status === 'ALL' || u.status === status) &&
-      (!t || u.name.toLowerCase().includes(t) || u.email.toLowerCase().includes(t) || u.title.toLowerCase().includes(t))
+      (!t || u.name.toLowerCase().includes(t) || u.email.toLowerCase().includes(t) || u.title.toLowerCase().includes(t) || (u.quoteCode ?? '').toLowerCase().includes(t))
     );
   });
   const open = (u: UserProfile | null) => {
@@ -348,7 +362,7 @@ export function UsersPage() {
           <div className="flex flex-col gap-3 border-b border-line px-5 py-3.5 md:flex-row md:items-center">
             <div className="relative md:w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-              <Input aria-label="Cari user" placeholder="Cari nama, email, jabatan" value={query} onChange={e => setQuery(e.target.value)} className="pl-9" />
+              <Input aria-label="Cari user" placeholder="Cari nama, kode, email, jabatan" value={query} onChange={e => setQuery(e.target.value)} className="pl-9" />
             </div>
             <Select aria-label="Filter role" value={role} onChange={e => setRole(e.target.value as typeof role)} className="md:w-48">
               <option value="ALL">Semua role</option>
@@ -415,7 +429,7 @@ export function UsersPage() {
                               {u.id === currentUser?.id && <span className="ml-2 text-xs font-normal text-ink-3">(Anda)</span>}
                             </p>
                             <p className="truncate text-xs text-ink-3">
-                              {u.email} · {u.title}
+                              {u.quoteCode ? <span className="font-mono font-semibold text-ink-2">{u.quoteCode}</span> : <span className="text-amber-700">belum ada kode</span>} · {u.email} · {u.title}
                             </p>
                           </div>
                         </div>
@@ -443,7 +457,7 @@ export function UsersPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-semibold text-ink">{u.name}</span>
                         <span className="block truncate text-xs text-ink-3">
-                          {ROLE_META[u.role].label} · {u.email}
+                          {ROLE_META[u.role].label} · {u.quoteCode ?? 'belum ada kode'}
                         </span>
                       </span>
                       <Badge tone={u.status === 'ACTIVE' ? 'green' : 'gray'}>{u.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif'}</Badge>

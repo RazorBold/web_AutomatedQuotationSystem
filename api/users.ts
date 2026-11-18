@@ -1,6 +1,6 @@
 /**
  * POST /api/users — Management only.
- *   { action: 'create', user: { name, email, phone, title, role, status, password } }
+ *   { action: 'create', user: { name, email, phone, title, role, status, password, quoteCode } }
  *   { action: 'update', id, patch: { name?, email?, phone?, title?, role?, status?, password? } }
  * Creating accounts and changing email/password need the Supabase Auth admin API (service role),
  * which is why this lives on the server instead of in an RPC.
@@ -18,6 +18,8 @@ interface UserFields {
   role?: Role;
   status?: 'ACTIVE' | 'INACTIVE';
   password?: string;
+  /** Kode user for sign-in (and, for Sales, quotation numbers). */
+  quoteCode?: string;
 }
 
 const initials = (name: string) =>
@@ -34,6 +36,7 @@ function validate(f: UserFields, creating: boolean) {
   if (f.role !== undefined && !ROLES.includes(f.role)) throw new HttpError(422, 'Role tidak valid.');
   if (f.status !== undefined && f.status !== 'ACTIVE' && f.status !== 'INACTIVE') throw new HttpError(422, 'Status tidak valid.');
   if (creating || f.password) if ((f.password ?? '').length < 8) throw new HttpError(422, 'Kata sandi minimal 8 karakter.');
+  if (creating && !/^[A-Z]{2,5}$/.test((f.quoteCode ?? '').trim().toUpperCase())) throw new HttpError(422, 'Isi kode user 2–5 huruf, mis. FHM.');
 }
 
 async function emailTaken(email: string, exceptId?: string) {
@@ -51,6 +54,9 @@ export const POST = handle(async request => {
     validate(u, true);
     const email = u.email!.trim().toLowerCase();
     if (await emailTaken(email)) throw new HttpError(409, 'Email ini sudah dipakai akun lain.');
+    const quoteCode = u.quoteCode!.trim().toUpperCase();
+    const { data: codeOwner } = await db.from('profiles').select('name').eq('quote_code', quoteCode).maybeSingle();
+    if (codeOwner) throw new HttpError(409, `Kode ${quoteCode} sudah dipakai ${codeOwner.name}.`);
 
     const { data: created, error } = await db.auth.admin.createUser({
       email,
@@ -70,6 +76,7 @@ export const POST = handle(async request => {
       role: u.role ?? 'SALES',
       status: u.status ?? 'ACTIVE',
       avatar: initials(u.name!),
+      quote_code: quoteCode,
     });
     if (profileError) {
       await db.auth.admin.deleteUser(created.user.id);

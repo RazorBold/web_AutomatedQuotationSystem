@@ -338,11 +338,19 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       return () => data.subscription.unsubscribe();
     },
 
-    async login(email, password) {
-      const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+    async login(identifier, password) {
+      // Kode user (ISM, RZK, …) or, as a fallback, the email address.
+      let email = identifier.trim();
+      if (!email.includes('@')) {
+        const { data: found, error: lookupError } = await sb.rpc('login_email', { p_code: email });
+        if (lookupError) return { ok: false, error: 'Tidak bisa masuk. Coba lagi beberapa saat.' };
+        if (!found) return { ok: false, error: 'Kode user atau kata sandi tidak cocok. Periksa kembali, lalu coba lagi.' };
+        email = found as string;
+      }
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error || !data.user) {
         const msg = error?.message ?? '';
-        if (/invalid login credentials/i.test(msg)) return { ok: false, error: 'Email atau kata sandi tidak cocok. Periksa kembali, lalu coba lagi.' };
+        if (/invalid login credentials/i.test(msg)) return { ok: false, error: 'Kode user atau kata sandi tidak cocok. Periksa kembali, lalu coba lagi.' };
         if (/banned/i.test(msg)) return { ok: false, error: 'Akun ini sedang dinonaktifkan. Hubungi Management untuk mengaktifkannya.' };
         return { ok: false, error: msg || 'Tidak bisa masuk. Coba lagi beberapa saat.' };
       }

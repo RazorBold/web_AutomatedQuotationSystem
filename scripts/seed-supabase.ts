@@ -69,6 +69,7 @@ async function seedUsers(): Promise<Map<string, string>> {
         email: u.email.toLowerCase(),
         status: u.status,
         avatar: u.avatar,
+        quote_code: u.quoteCode ?? null,
         created_at: parseIdDate(u.createdAt) ?? undefined,
         last_login_at: parseIdDate(u.lastLoginAt),
       }),
@@ -241,7 +242,7 @@ async function main() {
   await seedCatalog();
   await seedQuotations(ids);
   await seedCustomRequests(ids);
-  console.log(`Selesai. Masuk dengan email demo dan kata sandi "${password}".`);
+  console.log(`Selesai. Masuk dengan kode user demo (ISM, BYU, RZK, DWL) dan kata sandi "${password}".`);
 }
 
 main().catch(e => {
