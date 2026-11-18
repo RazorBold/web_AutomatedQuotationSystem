@@ -9,6 +9,7 @@ import { DEFAULT_LETTER, letterSettingsOf } from '../utils/letter';
 import type { ChargeInput } from '../backend';
 import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
 import { AgustaWebResults } from '../components/AgustaWebResults';
+import { ProductBrowser } from '../components/ProductBrowser';
 import { agustaImageUrl } from '../utils/agustaCatalog';
 import { parseSalesRequest } from '../utils/smartSearch';
 import type { CustomerCategory, CustomerInfo, LetterSettings, Quotation } from '../types';
@@ -74,11 +75,9 @@ export function QuotationWizard({
   const [charges, setCharges] = useState<ChargeInput[]>(() => chargeRows(editing?.charges));
   const [letter, setLetter] = useState<LetterSettings>(() => (editing ? letterSettingsOf(editing) : DEFAULT_LETTER));
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('Semua');
   const [submitting, setSubmitting] = useState(false);
 
-  const categories = useMemo(() => ['Semua', ...Array.from(new Set(products.map(p => p.category)))], [products]);
-  const results = smartProductSearch(products, query).filter(p => category === 'Semua' || p.category === category);
+  const ranked = useMemo(() => smartProductSearch(products, query), [products, query]);
   const byId = (id: string) => products.find(p => p.id === id)!;
 
   /** Discount rules follow the product's brand (R12). */
@@ -356,7 +355,7 @@ export function QuotationWizard({
       )}
 
       {step === 1 && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <Panel bodyClassName="">
             <div className="border-b border-line p-4">
               <div className="relative">
@@ -370,20 +369,6 @@ export function QuotationWizard({
                 />
               </div>
               <p className="mt-1.5 text-xs text-ink-3">Sistem membaca jumlah, budget, spesifikasi, dan beberapa barang sekaligus.</p>
-              <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-                {categories.map(c => (
-                  <button
-                    key={c}
-                    onClick={() => setCategory(c)}
-                    className={cx(
-                      'h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors cursor-pointer',
-                      category === c ? 'bg-link text-white' : 'bg-canvas text-ink-2 hover:text-ink'
-                    )}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <SmartSuggestions
@@ -406,53 +391,18 @@ export function QuotationWizard({
               }
             />
 
-            {results.length === 0 ? (
-              <EmptyState
-                icon={<PackageSearch className="size-5" />}
-                title="Produk tidak ditemukan"
-                description="Coba kata lain, atau ajukan sebagai barang custom agar Sales Support menghitung harganya."
-                action={<Button size="sm" onClick={() => openCustomRequest(query)}>Ajukan barang custom</Button>}
-              />
-            ) : (
-              <ul className="divide-y divide-line">
-                {results.map(p => {
-                  const inCart = lines.find(l => l.productId === p.id);
-                  return (
-                    <li key={p.id} className="flex items-center gap-4 px-4 py-3">
-                      <ProductImage src={p.image} alt="" hint={p.category} className="size-16 shrink-0 rounded-lg border border-line" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-link">{p.category}</p>
-                        <p className="truncate font-semibold text-ink">{p.name}</p>
-                        <p className="text-xs text-ink-3">
-                          {p.sku} · {p.isCustom ? 'barang custom, dibuat sesuai pesanan' : `stok ${p.stock} ${p.unit.toLowerCase()}`}
-                          {p.eKatalogLkpp && ' · e-Katalog LKPP'}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        {p.basePrice > 0 ? (
-                          <>
-                            <span className="text-[13px] font-semibold tabular-nums text-ink">{formatRupiah(p.basePrice)}</span>
-                            <Button size="sm" variant={inCart ? 'ghost' : 'secondary'} icon={<Plus className="size-3.5" />} onClick={() => addProduct(p.id)}>
-                              {inCart ? `Tambah (${inCart.qty})` : 'Tambah'}
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-xs text-ink-3">Harga belum ada</span>
-                            <Button size="sm" icon={<MessageSquarePlus className="size-3.5" />} onClick={() => requestPrice(p)}>
-                              Minta harga
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <ProductBrowser
+              catalog={products}
+              ranked={ranked}
+              query={query}
+              cartQty={id => lines.find(l => l.productId === id)?.qty ?? 0}
+              onAdd={id => addProduct(id)}
+              onRequestPrice={p => requestPrice(p)}
+              onCustomRequest={() => openCustomRequest(query)}
+            />
           </Panel>
 
-          <aside className="xl:sticky xl:top-0 xl:self-start">
+          <aside id="item-penawaran" className="scroll-mt-4 xl:sticky xl:top-0 xl:self-start">
             <Panel title="Item penawaran" description={`${lines.length} produk · ${customer.companyName || 'customer'}`} bodyClassName="">
               {lines.length === 0 ? (
                 <EmptyState icon={<ShoppingCart className="size-5" />} title="Belum ada produk" description="Pilih produk dari daftar di sebelah kiri." />
@@ -593,6 +543,14 @@ export function QuotationWizard({
           {step === 0 ? 'Batal' : 'Kembali'}
         </Button>
         <div className="flex items-center gap-4">
+          {step === 1 && lines.length > 0 && (
+            <a
+              href="#item-penawaran"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-semibold text-ink hover:border-link xl:hidden"
+            >
+              <ShoppingCart className="size-4 text-link" /> {lines.length} item
+            </a>
+          )}
           {step > 0 && (
             <span className="hidden text-[13px] text-ink-2 sm:inline">
               Total <span className="font-semibold tabular-nums text-ink">{formatRupiah(subtotal + tax)}</span>
