@@ -4,7 +4,6 @@ import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { SmartSuggestions } from '../components/SmartSuggestions';
 import { DiscountInput, RupiahInput } from '../components/DiscountInput';
 import { ChargesEditor, chargeRows, chargesTotal, cleanCharges } from '../components/ChargesEditor';
-import { LetterEditor, cleanLetter, letterProblems } from '../components/LetterEditor';
 import { DEFAULT_LETTER, letterSettingsOf } from '../utils/letter';
 import type { ChargeInput } from '../backend';
 import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
@@ -12,7 +11,7 @@ import { AgustaWebResults } from '../components/AgustaWebResults';
 import { ProductBrowser } from '../components/ProductBrowser';
 import { agustaImageUrl } from '../utils/agustaCatalog';
 import { parseSalesRequest } from '../utils/smartSearch';
-import type { CustomerCategory, CustomerInfo, LetterSettings, Quotation } from '../types';
+import type { CustomerCategory, CustomerInfo, Quotation } from '../types';
 import { Button, EmptyState, Field, Input, PageHeader, Panel, ProductImage, Textarea, cx } from '../components/ui';
 import { QuotationSheet } from '../components/QuotationDocument';
 import { calculateLineSubtotal, formatRupiah, getSuggestedDiscount, smartProductSearch } from '../utils/quotationEngine';
@@ -73,7 +72,6 @@ export function QuotationWizard({
   const [salesNotes, setSalesNotes] = useState(editing?.salesNotes ?? '');
   const [extraDiscount, setExtraDiscount] = useState(editing?.extraDiscount ?? 0);
   const [charges, setCharges] = useState<ChargeInput[]>(() => chargeRows(editing?.charges));
-  const [letter, setLetter] = useState<LetterSettings>(() => (editing ? letterSettingsOf(editing) : DEFAULT_LETTER));
   const [query, setQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -153,11 +151,6 @@ export function QuotationWizard({
   };
 
   const submit = () => {
-    const problems = letterProblems(letter);
-    if (problems.length) {
-      notify(problems[0]!, 'error');
-      return;
-    }
     setSubmitting(true);
     createQuotation(
       {
@@ -165,7 +158,6 @@ export function QuotationWizard({
         salesNotes,
         extraDiscount: appliedExtra,
         charges: cleanCharges(charges),
-        letter: cleanLetter(letter),
         items: lines.map(l => ({ productId: l.productId, qty: l.qty, discountPercent: l.discountPercent, notes: l.notes })),
       },
       editing?.id
@@ -186,7 +178,7 @@ export function QuotationWizard({
           id: 'preview',
           quotationNumber: editing?.quotationNumber ?? 'DRAF',
           issuedOn: new Date().toISOString().slice(0, 10),
-          ...cleanLetter(letter),
+          // Keterangan surat is Sales Support's: the preview shows what is set now (or the standard).
           date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
           validUntil: new Date(Date.now() + 14 * 86400000).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
           status: 'DRAFT',
@@ -522,12 +514,11 @@ export function QuotationWizard({
                 rows={5}
                 value={salesNotes}
                 onChange={e => setSalesNotes(e.target.value)}
-                placeholder="Urgensi, permintaan margin khusus, pesaing yang ikut tender…"
+                placeholder="Urgensi, pesaing yang ikut tender, permintaan customer soal DP/termin, franco, atau PPN…"
               />
-              <p className="mt-2 text-xs text-ink-3">Harga final, HPP, dan tanda tangan diisi setelah disetujui Sales Support.</p>
-            </Panel>
-            <Panel title="Format surat" description="Tampilan PPN, diskon, keterangan, dan termin pembayaran. Pratinjau di kiri langsung berubah.">
-              <LetterEditor value={letter} onChange={setLetter} />
+              <p className="mt-2 text-xs text-ink-3">
+                Keterangan surat (PPN, franco, termin pembayaran, rekening) dan harga final diatur Sales Support saat review. Tulis permintaan customer di sini.
+              </p>
             </Panel>
           </aside>
         </div>

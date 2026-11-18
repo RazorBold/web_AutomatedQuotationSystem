@@ -442,7 +442,8 @@ export function createLocalBackend(): Backend {
             createdAtIso: new Date().toISOString(),
           };
 
-      const q = withTotals(withLetter(base, input.letter), items);
+      // Keterangan surat is set by Sales Support at review (same rule as set_quotation_letter).
+      const q = withTotals(withLetter(base, can(actor, 'quotation:review') ? input.letter : undefined), items);
       state = { ...state, quotations: existing ? state.quotations.map(x => (x.id === q.id ? q : x)) : [q, ...state.quotations] };
       save();
       notify(
