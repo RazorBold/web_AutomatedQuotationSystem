@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowUpRight, CalendarClock, FilePlus2, FileText, Inbox, PackageSearch } from 'lucide-react';
 import { OutcomeBadge } from '../components/FollowUpPanel';
 import { FOLLOWUP_INTERVAL_DAYS, needsFollowUp } from '../utils/analytics';
+import { eventTime } from '../utils/dates';
 import { useStore } from '../store/AppStore';
 import { can } from '../auth/permissions';
 import { Button, EmptyState, HeroStats, PageHeader, Panel, StatusBadge } from '../components/ui';
@@ -186,10 +187,10 @@ export function DashboardPage({ navigate }: { navigate: (r: Route) => void }) {
   const belowFloor = queue.filter(q => q.grossMarginPercent < MARGIN_FLOOR);
   const pricing = customRequests.filter(r => r.status === (isManagement ? 'PENDING_MANAGEMENT' : 'PENDING_PRICING'));
   const toSend = quotations.filter(q => q.status === 'APPROVED');
+  // Newest first by event time; the order quotations arrive in differs per backend.
   const activity = quotations
-    .flatMap(q => (q.history ?? []).map(h => ({ ...h, q })))
-    .slice(-50)
-    .reverse()
+    .flatMap(q => (q.history ?? []).map(h => ({ ...h, q, t: eventTime(h)?.getTime() ?? 0 })))
+    .sort((a, b) => b.t - a.t)
     .slice(0, 6);
 
   return (

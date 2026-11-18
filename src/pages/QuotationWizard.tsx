@@ -569,7 +569,8 @@ export function QuotationWizard({
         </div>
       )}
 
-      <div className="sticky bottom-0 -mx-4 flex items-center justify-between gap-3 border-t border-line bg-canvas/95 px-4 py-3 backdrop-blur-sm sm:-mx-8 sm:px-8">
+      {/* z-20: the content block after the page hero is raised (z-index 1) and would otherwise sit over this bar. */}
+      <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-line bg-canvas/95 px-4 py-3 backdrop-blur-sm sm:-mx-8 sm:px-8">
         <Button
           variant="ghost"
           icon={step > 0 ? <ChevronLeft className="size-4" /> : undefined}
