@@ -2,14 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, CopyPlus, Download, FileText, PencilLine, Send, ShieldCheck, ShieldQuestion, Undo2 } from 'lucide-react';
 import { errorMessage, useStore } from '../store/AppStore';
 import { can } from '../auth/permissions';
-import type { Quotation, QuotationItemData } from '../types';
+import type { LetterSettings, Quotation, QuotationItemData } from '../types';
 import { Badge, Button, EmptyState, PageHeader, Panel, ProductImage, StatusBadge, Textarea, cx } from '../components/ui';
 import { MarginValue, MARGIN_FLOOR } from '../components/QuotationTable';
-import { PdfDialog, QuotationSheet, WhatsAppDialog, downloadQuotationPdf } from '../components/QuotationDocument';
+import { PdfDialog, QuotationSheet, WhatsAppDialog, downloadQuotationPdf, useSigner } from '../components/QuotationDocument';
 import { calculateLineSubtotal, calculateQuotationTotals, formatRupiah, getSuggestedDiscount, validateMarginSafety } from '../utils/quotationEngine';
 import type { Route } from '../App';
 import { DiscountInput, RupiahInput } from '../components/DiscountInput';
-import { ChargesEditor, chargesTotal, cleanCharges } from '../components/ChargesEditor';
+import { ChargesEditor, chargeRows, chargesTotal, cleanCharges } from '../components/ChargesEditor';
+import { LetterEditor, cleanLetter, letterProblems } from '../components/LetterEditor';
+import { letterSettingsOf } from '../utils/letter';
 import type { ChargeInput, QuotationAdjustments } from '../backend';
 import { FollowUpPanel } from '../components/FollowUpPanel';
 
@@ -147,11 +149,11 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
   const [reasonError, setReasonError] = useState('');
   const [acceptLowMargin, setAcceptLowMargin] = useState(false);
   const [busy, setBusy] = useState<'approve' | 'reject' | 'save' | 'escalate' | 'return' | null>(null);
-  const initialCharges = (q.charges ?? []).map(({ id: _id, ...c }) => c);
-  const [adj, setAdj] = useState<{ extraDiscount: number; showTax: boolean; showDiscount: boolean; charges: ChargeInput[] }>({
+  const initialCharges = chargeRows(q.charges);
+  const initialLetter = letterSettingsOf(q);
+  const [adj, setAdj] = useState<{ extraDiscount: number; letter: LetterSettings; charges: ChargeInput[] }>({
     extraDiscount: q.extraDiscount ?? 0,
-    showTax: q.showTax ?? true,
-    showDiscount: q.showDiscount ?? true,
+    letter: initialLetter,
     charges: initialCharges,
   });
 
@@ -176,18 +178,23 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
   const overMax = lines.filter(l => l.overMax);
   const needsManagement = (unsafe.length > 0 || overMax.length > 0) && q.escalation?.decision !== 'APPROVED';
 
-  const adjustments: QuotationAdjustments = { ...adj, extraDiscount: totals.extraDiscount, charges };
+  const letter = cleanLetter(adj.letter);
+  const letterError = letterProblems(adj.letter)[0];
+  const adjustments: QuotationAdjustments = { extraDiscount: totals.extraDiscount, charges, letter };
   const adjChanged =
     adj.extraDiscount !== (q.extraDiscount ?? 0) ||
-    adj.showTax !== (q.showTax ?? true) ||
-    adj.showDiscount !== (q.showDiscount ?? true) ||
-    JSON.stringify(charges) !== JSON.stringify(initialCharges);
+    JSON.stringify(letter) !== JSON.stringify(cleanLetter(initialLetter)) ||
+    JSON.stringify(charges) !== JSON.stringify(cleanCharges(initialCharges));
   const dirty = JSON.stringify(items) !== JSON.stringify(q.items) || notes !== (q.supportNotes ?? '') || adjChanged;
 
   const patch = (idx: number, p: Partial<QuotationItemData>) => setItems(prev => prev.map((it, i) => (i === idx ? { ...it, ...p } : it)));
   const num = (v: string) => Math.max(0, Number(v.replace(/[^\d]/g, '')) || 0);
 
   const run = async (kind: NonNullable<typeof busy>, fn: () => Promise<void>) => {
+    if (letterError && kind !== 'reject') {
+      notify(letterError, 'error');
+      return;
+    }
     setBusy(kind);
     try {
       await fn();
@@ -339,7 +346,7 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
           </table>
         </Panel>
 
-        <Panel title="Biaya tambahan" description="Jasa pasang, ongkos kirim, atau biaya lain yang belum dimasukkan Sales. Kena PPN, tidak kena diskon, tidak dihitung di margin.">
+        <Panel title="Jasa & biaya tambahan" description="Jasa pasang, pengiriman, testing, dan sebagainya. Dicetak sebagai baris bernomor di tabel. Centang Termasuk bila tanpa biaya. Kena PPN, tidak kena diskon, tidak dihitung di margin.">
           <ChargesEditor charges={adj.charges} onChange={c => setAdj(a => ({ ...a, charges: c }))} />
         </Panel>
 
@@ -409,23 +416,12 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
             </div>
           </dl>
 
-          <fieldset className="mt-4 rounded-lg border border-line p-3.5">
-            <legend className="px-1 text-[13px] font-semibold text-ink">Tampilan di PDF</legend>
-            {(
-              [
-                ['showTax', 'Tampilkan PPN', 'Bila tidak dicentang: baris PPN disembunyikan, surat mencantumkan “harga belum termasuk PPN”.'],
-                ['showDiscount', 'Tampilkan diskon', 'Bila tidak dicentang: kolom diskon disembunyikan, harga satuan langsung harga setelah diskon per item. Diskon tambahan tetap tertulis.'],
-              ] as const
-            ).map(([key, label, hint]) => (
-              <label key={key} className="mt-2 flex cursor-pointer items-start gap-2.5 first-of-type:mt-0.5">
-                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-link)]" checked={adj[key]} onChange={e => setAdj(a => ({ ...a, [key]: e.target.checked }))} />
-                <span>
-                  <span className="block text-[13px] text-ink">{label}</span>
-                  <span className="block text-xs text-ink-3">{hint}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
+          <details className="group mt-4 rounded-lg border border-line" open>
+            <summary className="cursor-pointer list-none px-3.5 py-2.5 text-[13px] font-semibold text-ink marker:hidden">Format surat</summary>
+            <div className="border-t border-line px-3.5 py-3.5">
+              <LetterEditor value={adj.letter} onChange={l => setAdj(a => ({ ...a, letter: l }))} />
+            </div>
+          </details>
 
           {mode === 'review' && needsManagement && (
             <div className="mt-4 rounded-lg bg-violet-50 px-3.5 py-3 text-[13px] text-violet-900">
@@ -534,10 +530,7 @@ export function QuotationDetailPage({ id, navigate }: { id: string; navigate: (r
   const [waOpen, setWaOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [revising, setRevising] = useState(false);
-  const director = useMemo(
-    () => users.find(u => u.role === 'MANAGEMENT' && u.status === 'ACTIVE') ?? { name: 'Direktur Komersial', title: 'Direktur Komersial' },
-    [users]
-  );
+  const signer = useSigner(q ?? null);
 
   const isReviewer = can(currentUser, 'quotation:review');
   const isManagement = currentUser?.role === 'MANAGEMENT';
@@ -593,7 +586,7 @@ export function QuotationDetailPage({ id, navigate }: { id: string; navigate: (r
           !mode && (
             <>
               {(issued || q.status === 'REVISED') && q.pdfGeneratedAt && (
-                <Button icon={<Download className="size-4" />} onClick={() => downloadQuotationPdf(q, director)}>
+                <Button icon={<Download className="size-4" />} onClick={() => downloadQuotationPdf(q, signer)}>
                   {q.status === 'REVISED' ? 'Unduh PDF arsip' : 'Unduh PDF'}
                 </Button>
               )}

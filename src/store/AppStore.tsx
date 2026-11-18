@@ -5,7 +5,7 @@ import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
 import type { MarketSearchResult, SupplierRef } from '../utils/marketResearch';
 import type { SupplierSearchResult, SupplierSite } from '../utils/supplierSearch';
-import { buildQuotationPdf, getDirector } from '../utils/quotationPdf';
+import { buildQuotationPdf, signerFor } from '../utils/quotationPdf';
 import { can } from '../auth/permissions';
 import {
   backend,
@@ -111,6 +111,9 @@ interface Store {
 
   addUser: (user: NewUserInput) => Promise<Result>;
   updateUser: (id: string, patch: UserPatch) => Promise<Result>;
+  /** Management: letter code of a Sales person and, optionally, the last number already used this year. */
+  setQuoteCode: (userId: string, code: string, lastNo?: number) => Promise<void>;
+  quoteCounters: () => Promise<Record<string, number>>;
 
   /** Local demo mode only. */
   resetDemoData?: () => Promise<void>;
@@ -214,7 +217,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const deliver = async (q: Quotation, users: UserProfile[], forcePdf: boolean): Promise<WhatsAppSendResult> => {
     const me = actor();
     if (backend.mode === 'supabase' && (forcePdf || !q.pdfPath)) {
-      const pdf = await buildQuotationPdf(q, getDirector(users));
+      const pdf = await buildQuotationPdf(q, signerFor(q, users));
       await backend.attachQuotationPdf(me, q, pdf);
     }
     return backend.sendWhatsApp(me, q.id);
@@ -334,6 +337,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     if (res.ok) await refresh();
     return res;
   };
+
+  const setQuoteCode: Store['setQuoteCode'] = async (userId, code, lastNo) => {
+    await backend.setQuoteCode(actor(), userId, code, lastNo);
+    await refresh();
+  };
+  const quoteCounters: Store['quoteCounters'] = () => backend.quoteCounters(actor());
 
   const markNotificationsRead: Store['markNotificationsRead'] = async ids => {
     // Optimistic: the badge clears immediately.
@@ -458,6 +467,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     createQuotationRevision,
     addQuotationFollowUp,
     addUser,
+    setQuoteCode,
+    quoteCounters,
     updateUser,
     resetDemoData,
   };

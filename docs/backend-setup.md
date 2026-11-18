@@ -24,6 +24,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
    7. `supabase/migrations/20261119000000_tahap3_followup.sql`: update perkembangan penawaran oleh Sales (status, nilai PO, alasan kalah) dan fungsi pengingat mingguan.
    8. `supabase/migrations/20261120000000_tahap4_supplier.sql`: daftar website supplier, import price list ke HPP, dan riwayat perubahan HPP (hanya terlihat oleh Sales Support & Management).
    9. `supabase/migrations/20261121000000_airtable_catalog.sql`: sinkronisasi katalog dari Airtable (harga jual dari Airtable) dan bucket publik `product-images` untuk foto produk. Isi `AIRTABLE_TOKEN`, `AIRTABLE_BASE_ID`, dan `AIRTABLE_PRODUCTS_TABLE` (lihat `.env.example`), lalu jalankan **Katalog produk → Sinkronkan dari Airtable**.
+   10. `supabase/migrations/20261122000000_letter_format.sql`: surat penawaran format Agusta. Nomor 0088/FHM/AG/VIII/26 (urut per kode surat per tahun; kode diatur Management di menu User), tampilan PPN (dipisah / sudah termasuk / belum termasuk), tampilan diskon (persen / rupiah / disembunyikan), keterangan, termin pembayaran (DP), dan jasa/biaya yang dicetak "Termasuk".
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`

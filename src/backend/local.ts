@@ -3,10 +3,11 @@
  * Behaviour matches the original prototype; WhatsApp is always simulated.
  */
 import { INITIAL_CUSTOM_REQUESTS, INITIAL_QUOTATIONS, PRODUCTS, USERS } from '../data/mockData';
-import type { AppNotification, FollowUp, NotificationType, PriceChange, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, FollowUp, LetterSettings, NotificationType, PriceChange, Product, Quotation, QuotationCharge, QuotationEvent, QuotationItemData, UserProfile } from '../types';
 import { FOLLOWUP_INTERVAL_DAYS, needsFollowUp } from '../utils/analytics';
 import { can, type Permission } from '../auth/permissions';
-import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, generateQuotationNumber, normalizeBrand } from '../utils/quotationEngine';
+import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, normalizeBrand } from '../utils/quotationEngine';
+import { agustaNumber } from '../utils/letter';
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
 import type { Backend, ChargeInput, QuotationAdjustments, Snapshot } from './types';
 import { agustaApi, productFromAgusta, sameProduct } from './agustaApi';
@@ -18,6 +19,8 @@ const STORAGE_KEY = 'agusta-qs:v3';
 /** All users' notifications are kept; load() returns only the signed-in user's. */
 interface State extends Snapshot {
   sessionUserId: string | null;
+  /** Last letter number used per code-year ("FHM-2026"), as set by Management. */
+  quoteCounters?: Record<string, number>;
 }
 
 const now = (withTime = true) =>
@@ -95,6 +98,7 @@ function read(): State {
       supplierSites: p.supplierSites ?? [],
       priceHistory: p.priceHistory ?? [],
       sessionUserId: p.sessionUserId ?? null,
+      quoteCounters: p.quoteCounters ?? {},
     };
   } catch {
     return base;
@@ -117,9 +121,29 @@ export function createLocalBackend(): Backend {
   };
 
   const withCharges = (c: ChargeInput[] | undefined, fallback?: QuotationCharge[]): QuotationCharge[] | undefined =>
-    c ? c.filter(x => x.amount > 0 && x.label.trim()).map((x, i) => ({ ...x, label: x.label.trim(), id: `chg-${Date.now()}-${i}` })) : fallback;
-  const applyAdj = (q: Quotation, a?: QuotationAdjustments): Quotation =>
-    a ? { ...q, ...a, charges: withCharges(a.charges, q.charges) } : q;
+    c ? c.filter(x => x.amount >= 0 && x.label.trim()).map((x, i) => ({ ...x, label: x.label.trim(), id: `chg-${Date.now()}-${i}` })) : fallback;
+  const withLetter = (q: Quotation, l?: LetterSettings): Quotation =>
+    l
+      ? { ...q, taxMode: l.taxMode, discountMode: l.discountMode, showTax: l.taxMode !== 'EXCLUDED', showDiscount: l.discountMode !== 'HIDDEN', terms: l.terms, paymentTerms: l.paymentTerms.length ? l.paymentTerms : undefined }
+      : q;
+  const applyAdj = (q: Quotation, a?: QuotationAdjustments): Quotation => {
+    if (!a) return q;
+    const { letter, ...rest } = a;
+    return withLetter({ ...q, ...rest, charges: withCharges(a.charges, q.charges) }, letter);
+  };
+  /** Same scheme as the database trigger: running number per letter code per year. */
+  const nextQuoteNumber = (actor: UserProfile) => {
+    const code = actor.quoteCode || (/^[A-Z]{2,5}$/.test(actor.avatar) ? actor.avatar : 'AG');
+    const today = new Date();
+    const key = `${code}-${today.getFullYear()}`;
+    const yy = String(today.getFullYear()).slice(2);
+    const used = state.quotations
+      .map(q => q.quotationNumber.match(new RegExp(`^(\\d{4})/${code}/AG/[IVX]+/${yy}(-R\\d+)?$`))?.[1])
+      .reduce((m, s) => Math.max(m, Number(s ?? 0)), 0);
+    const seq = Math.max(used, state.quoteCounters?.[key] ?? 0) + 1;
+    state = { ...state, quoteCounters: { ...state.quoteCounters, [key]: seq } };
+    return agustaNumber(seq, code, today);
+  };
   const usersWithRole = (role: UserProfile['role']) => state.users.filter(u => u.status === 'ACTIVE' && u.role === role).map(u => u.id);
   const escalationEvent = (actor: UserProfile, note: string) => ({ note: note.trim(), by: actor.name, byId: actor.id, at: now() });
 
@@ -393,9 +417,8 @@ export function createLocalBackend(): Backend {
           }
         : {
             id: `qtn-${Date.now()}`,
-            quotationNumber: generateQuotationNumber(
-              state.quotations.reduce((max, q) => Math.max(max, Number(q.quotationNumber.slice(-4)) || 0), 0) + 1
-            ),
+            quotationNumber: nextQuoteNumber(actor),
+            issuedOn: new Date().toISOString().slice(0, 10),
             date: now(false),
             validUntil: new Date(Date.now() + 14 * 86400000).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
             status: 'PENDING_REVIEW',
@@ -419,7 +442,7 @@ export function createLocalBackend(): Backend {
             createdAtIso: new Date().toISOString(),
           };
 
-      const q = withTotals(base, items);
+      const q = withTotals(withLetter(base, input.letter), items);
       state = { ...state, quotations: existing ? state.quotations.map(x => (x.id === q.id ? q : x)) : [q, ...state.quotations] };
       save();
       notify(
@@ -767,6 +790,27 @@ export function createLocalBackend(): Backend {
       state = { ...state, products, priceHistory: [...logged, ...state.priceHistory].slice(0, 500) };
       save();
       return logged.length;
+    },
+
+    async setQuoteCode(actor, userId, code, lastNo) {
+      if (!can(actor, 'users:manage')) throw new Error('Hanya Management yang dapat mengatur kode surat.');
+      const c = code.trim().toUpperCase();
+      if (c && !/^[A-Z]{2,5}$/.test(c)) throw new Error('Kode surat 2–5 huruf, mis. FHM.');
+      state = { ...state, users: state.users.map(u => (u.id === userId ? { ...u, quoteCode: c || undefined } : u)) };
+      if (lastNo !== undefined) {
+        const u = state.users.find(x => x.id === userId);
+        const effective = c || (u && /^[A-Z]{2,5}$/.test(u.avatar) ? u.avatar : 'AG');
+        state = { ...state, quoteCounters: { ...state.quoteCounters, [`${effective}-${new Date().getFullYear()}`]: lastNo } };
+      }
+      save();
+    },
+
+    async quoteCounters(actor) {
+      if (!can(actor, 'users:manage')) return {};
+      const year = String(new Date().getFullYear());
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(state.quoteCounters ?? {})) if (k.endsWith(`-${year}`)) out[k.slice(0, -5)] = v;
+      return out;
     },
 
     async addUser(actor, input) {

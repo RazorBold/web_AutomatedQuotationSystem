@@ -9,6 +9,7 @@ import type {
   CustomProductRequest,
   CustomerInfo,
   Escalation,
+  LetterSettings,
   PriceChange,
   Product,
   Quotation,
@@ -20,6 +21,7 @@ import type { CustomerCategory, DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { Backend, QuotationAdjustments, Result } from './types';
 import { agustaApi } from './agustaApi';
+import { quotationFileName, storageFileName } from '../utils/letter';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -54,6 +56,7 @@ function mapProfile(r: Row): UserProfile {
     phone: r.phone ?? '',
     email: r.email,
     status: r.status,
+    quoteCode: r.quote_code ?? undefined,
     createdAt: fmt(r.created_at, false),
     lastLoginAt: r.last_login_at ? fmt(r.last_login_at) : undefined,
   };
@@ -135,9 +138,14 @@ function mapQuotation(r: Row): Quotation {
     extraDiscount: n(r.extra_discount),
     showTax: r.show_tax ?? true,
     showDiscount: r.show_discount ?? true,
+    taxMode: r.tax_mode ?? undefined,
+    discountMode: r.discount_mode ?? undefined,
+    terms: Array.isArray(r.letter_terms) ? r.letter_terms : undefined,
+    paymentTerms: Array.isArray(r.payment_terms) ? r.payment_terms.map((p: Row) => ({ label: String(p.label), percent: Number(p.percent) })) : undefined,
+    issuedOn: r.issued_on ?? undefined,
     charges: ((r.quotation_charges ?? []) as Row[])
       .sort((a, b) => a.position - b.position)
-      .map(c => ({ id: c.id, kind: c.kind, label: c.label, amount: n(c.amount) })),
+      .map(c => ({ id: c.id, kind: c.kind, label: c.label, amount: n(c.amount), description: c.description || undefined })),
     escalation: mapEscalation(r.escalation),
     revisionOf: r.revision_of ?? undefined,
     revisionNo: r.revision_no ?? 0,
@@ -264,6 +272,18 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
     return t;
   }
 
+  async function setLetter(id: string, l: LetterSettings) {
+    check(
+      await sb.rpc('set_quotation_letter', {
+        p_id: id,
+        p_tax_mode: l.taxMode,
+        p_discount_mode: l.discountMode,
+        p_terms: l.terms,
+        p_payment_terms: l.paymentTerms,
+      })
+    );
+  }
+
   async function applyAdjustments(id: string, a: QuotationAdjustments | undefined) {
     if (!a) return;
     if (a.charges) check(await sb.rpc('set_quotation_charges', { p_id: id, p_charges: a.charges }));
@@ -271,10 +291,12 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       await sb.rpc('set_quotation_adjustments', {
         p_id: id,
         p_extra_discount: a.extraDiscount ?? null,
-        p_show_tax: a.showTax ?? null,
-        p_show_discount: a.showDiscount ?? null,
+        // The letter format supersedes the old toggles.
+        p_show_tax: a.letter ? null : a.showTax ?? null,
+        p_show_discount: a.letter ? null : a.showDiscount ?? null,
       })
     );
+    if (a.letter) await setLetter(id, a.letter);
   }
 
   async function api<T>(path: string, body: unknown): Promise<T> {
@@ -439,6 +461,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
         check(await sb.rpc('set_quotation_adjustments', { p_id: data as string, p_extra_discount: input.extraDiscount }));
       }
       if (input.charges) check(await sb.rpc('set_quotation_charges', { p_id: data as string, p_charges: input.charges }));
+      if (input.letter) await setLetter(data as string, input.letter);
       return data as string;
     },
 
@@ -457,7 +480,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
     },
 
     async attachQuotationPdf(_actor, q, pdf) {
-      const path = `${q.id}/Penawaran_${q.quotationNumber}.pdf`;
+      const path = `${q.id}/${storageFileName(quotationFileName({ quotationNumber: q.quotationNumber, customerName: q.customer.companyName, revisionNo: q.revisionNo }))}`;
       check(await sb.storage.from('quotations').upload(path, pdf, { contentType: 'application/pdf', upsert: true }));
       check(await sb.rpc('set_quotation_pdf', { p_id: q.id, p_path: path }));
     },
@@ -551,6 +574,14 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
           p_brand: patch.brand ?? null,
         })
       );
+    },
+
+    async setQuoteCode(_actor, userId, code, lastNo) {
+      check(await sb.rpc('set_quote_code', { p_user: userId, p_code: code, p_last_no: lastNo ?? null }));
+    },
+    async quoteCounters() {
+      const { data } = check(await sb.rpc('quote_counters_this_year'));
+      return Object.fromEntries(((data ?? []) as Row[]).map(r => [r.code, Number(r.last_no)]));
     },
 
     async addUser(_actor, input): Promise<Result> {

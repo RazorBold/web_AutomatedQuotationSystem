@@ -1,15 +1,43 @@
 /**
- * How a quotation is presented to the customer (on-screen letter and PDF), following the
- * Sales Support display settings. One source so the preview and the PDF never disagree.
+ * How a quotation is presented to the customer (on-screen letter and PDF), in Agusta's letter format.
+ * One source so the preview and the PDF never disagree.
+ *
+ * PPN (tax mode):
+ *   ADDED     prices before PPN, then Total / PPN 11% / Grand Total
+ *   INCLUDED  every price shown incl. PPN, no PPN line, "Harga sudah termasuk PPN"
+ *   EXCLUDED  prices before PPN, no PPN line, "Harga belum termasuk PPN"
+ * Discount: PERCENT (column in %), AMOUNT (column in rupiah per line), HIDDEN (net unit price).
+ * Charges (jasa pasang, ongkir, …) are numbered rows of the table; amount 0 prints "Termasuk".
  */
-import type { Quotation, QuotationItemData } from '../types';
+import type { DiscountMode, PaymentTerm, Quotation, QuotationItemData, TaxMode } from '../types';
 import { formatRupiah } from './quotationEngine';
+import { discountModeOf, letterSettingsOf, taxModeOf } from './letter';
 
+export interface DocumentRow {
+  kind: 'item' | 'charge';
+  no: number;
+  title: string;
+  /** Specification lines, printed under the title. */
+  detail: string[];
+  /** Item notes from Sales ("#Pembelian 2 unit/lebih"). */
+  note?: string;
+  item?: QuotationItemData;
+  image?: string;
+  category?: string;
+  qty: number;
+  unit: string;
+  /** null = "Termasuk". */
+  unitPrice: number | null;
+  /** "10%", "Rp 877.000", "–"; null when the discount column is hidden. */
+  discountText: string | null;
+  /** null = "Termasuk". */
+  amount: number | null;
+}
+
+/** Kept for callers that only need the item lines. */
 export interface DocumentLine {
   item: QuotationItemData;
-  /** Unit price as printed: list price, or the price after the item discount when discounts are hidden. */
   unitPrice: number;
-  /** "10%", "4,44%" or "–"; null when the discount column is hidden. */
   discountText: string | null;
   amount: number;
 }
@@ -21,60 +49,119 @@ export interface DocumentTotalRow {
 }
 
 export interface DocumentView {
+  taxMode: TaxMode;
+  discountMode: DiscountMode;
+  /** Back-compat: PPN line shown / discount column shown. */
   showTax: boolean;
   showDiscount: boolean;
+  rows: DocumentRow[];
   lines: DocumentLine[];
   totals: DocumentTotalRow[];
-  /** First line of the terms: says whether PPN is included. */
+  /** "Keterangan": PPN statement (when not a separate line) + the quotation's terms. */
+  terms: string[];
+  paymentTerms: PaymentTerm[];
+  /** First PPN statement, kept for callers that print one line. */
   taxTerm: string;
-  /** Amount communicated as "total" (WhatsApp etc.): with PPN, or the pre-tax subtotal when PPN is hidden. */
+  /** Amount the customer pays as shown on the letter (WhatsApp etc.). */
   headlineTotal: number;
 }
 
 export const formatPercent = (p: number) =>
   Number.isInteger(p) ? `${p}%` : `${p.toFixed(2).replace(/\.?0+$/, '').replace('.', ',')}%`;
 
+/** "- Bahan: Oscar\n- Ukuran: 45 x 43" or "Merek: X; Tipe: Y" → one line each. */
+export function specLines(specs: string | undefined): string[] {
+  const s = (specs ?? '').trim();
+  if (!s) return [];
+  const parts = s.includes('\n') ? s.split(/\r?\n/) : s.split(/;\s*/);
+  return parts.map(p => p.trim()).filter(Boolean).slice(0, 12);
+}
+
 export function documentView(q: Quotation): DocumentView {
-  const showTax = q.showTax !== false;
-  const showDiscount = q.showDiscount !== false;
-  const extra = Math.max(0, q.extraDiscount ?? 0);
+  const settings = letterSettingsOf(q);
+  const taxMode = taxModeOf(q);
+  const discountMode = discountModeOf(q);
+  const gross = taxMode === 'INCLUDED' ? 1 + q.taxRatePercent / 100 : 1;
+  const g = (v: number) => Math.round(v * gross);
 
-  const lines: DocumentLine[] = q.items.map(it => ({
-    item: it,
-    unitPrice: showDiscount ? it.sellingPrice : Math.round(it.sellingPrice * (1 - it.discountPercent / 100)),
-    discountText: showDiscount ? (it.discountPercent ? formatPercent(it.discountPercent) : '–') : null,
-    amount: it.subtotal,
-  }));
+  const rows: DocumentRow[] = [];
+  const lines: DocumentLine[] = [];
+  q.items.forEach(it => {
+    const listUnit = g(it.sellingPrice);
+    const amount = g(it.subtotal);
+    const discount = Math.max(0, listUnit * it.qty - amount);
+    const unitPrice = discountMode === 'HIDDEN' ? Math.round(amount / Math.max(1, it.qty)) : listUnit;
+    const discountText =
+      discountMode === 'HIDDEN' ? null : !it.discountPercent ? '–' : discountMode === 'AMOUNT' ? formatRupiah(discount) : formatPercent(it.discountPercent);
+    rows.push({
+      kind: 'item',
+      no: rows.length + 1,
+      title: it.productName,
+      detail: specLines(it.specs),
+      note: it.notes?.trim() || undefined,
+      item: it,
+      image: it.image,
+      category: it.category,
+      qty: it.qty,
+      unit: it.unit,
+      unitPrice,
+      discountText,
+      amount,
+    });
+    lines.push({ item: it, unitPrice, discountText, amount });
+  });
+  for (const c of q.charges ?? []) {
+    rows.push({
+      kind: 'charge',
+      no: rows.length + 1,
+      title: c.label,
+      detail: specLines(c.description),
+      qty: 1,
+      unit: 'Lot',
+      unitPrice: c.amount > 0 ? g(c.amount) : null,
+      discountText: discountMode === 'HIDDEN' ? null : '–',
+      amount: c.amount > 0 ? g(c.amount) : null,
+    });
+  }
 
-  const charges = q.charges ?? [];
-  const chargeSum = charges.reduce((s, c) => s + c.amount, 0);
-  const itemsTotal = q.subtotal - chargeSum + extra;
-
+  const linesTotal = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const extra = Math.min(linesTotal, g(Math.max(0, q.extraDiscount ?? 0)));
   const totals: DocumentTotalRow[] = [];
-  if (extra > 0 || charges.length > 0) {
-    totals.push({ label: 'Total item', value: formatRupiah(itemsTotal) });
-    if (extra > 0) totals.push({ label: 'Diskon tambahan', value: `- ${formatRupiah(extra)}` });
-    for (const c of charges) totals.push({ label: c.label, value: formatRupiah(c.amount) });
+  if (extra > 0) {
+    totals.push({ label: 'Jumlah', value: formatRupiah(linesTotal) });
+    totals.push({ label: 'Diskon', value: `- ${formatRupiah(extra)}` });
   }
-  if (showTax) {
-    totals.push({ label: 'Subtotal', value: formatRupiah(q.subtotal) });
+  let headlineTotal: number;
+  if (taxMode === 'ADDED') {
+    totals.push({ label: 'Total', value: formatRupiah(q.subtotal) });
     totals.push({ label: `PPN ${q.taxRatePercent}%`, value: formatRupiah(q.taxAmount) });
-    totals.push({ label: 'Total', value: formatRupiah(q.grandTotal), strong: true });
+    totals.push({ label: 'Grand Total', value: formatRupiah(q.grandTotal), strong: true });
+    headlineTotal = q.grandTotal;
+  } else if (taxMode === 'INCLUDED') {
+    headlineTotal = linesTotal - extra;
+    totals.push({ label: 'Total', value: formatRupiah(headlineTotal), strong: true });
   } else {
-    totals.push({ label: 'Total (belum termasuk PPN)', value: formatRupiah(q.subtotal), strong: true });
+    headlineTotal = q.subtotal;
+    totals.push({ label: 'Total', value: formatRupiah(q.subtotal), strong: true });
   }
+
+  const taxTerm =
+    taxMode === 'INCLUDED' ? `Harga sudah termasuk PPN ${q.taxRatePercent}%` : taxMode === 'EXCLUDED' ? 'Harga belum termasuk PPN' : `Harga belum termasuk PPN ${q.taxRatePercent}% (tercantum terpisah)`;
 
   return {
-    showTax,
-    showDiscount,
+    taxMode,
+    discountMode,
+    showTax: taxMode === 'ADDED',
+    showDiscount: discountMode !== 'HIDDEN',
+    rows,
     lines,
     totals,
-    taxTerm: showTax
-      ? `Harga sudah termasuk PPN ${q.taxRatePercent}% dan pengiriman wilayah Jabodetabek.`
-      : 'Harga belum termasuk PPN. Harga sudah termasuk pengiriman wilayah Jabodetabek.',
-    headlineTotal: showTax ? q.grandTotal : q.subtotal,
+    terms: [...(taxMode === 'ADDED' ? [] : [taxTerm]), ...settings.terms],
+    paymentTerms: settings.paymentTerms,
+    taxTerm,
+    headlineTotal,
   };
 }
 
-/** "Jl. …, Jakarta" without dangling commas when parts are empty. */
+/** "Jl. …, Semarang" without dangling commas when parts are empty. */
 export const customerAddress = (q: Quotation) => [q.customer.address, q.customer.city].map(s => s?.trim()).filter(Boolean).join(', ');

@@ -1,25 +1,25 @@
 /**
- * Formal quotation PDF (jsPDF). Pure: no React, no store — used for downloads and for the
- * copy uploaded to storage and attached to the WhatsApp notification.
+ * Formal quotation PDF (jsPDF) in Agusta's letter format. Pure: no React, no store — used for
+ * downloads and for the copy uploaded to storage and attached to the WhatsApp notification.
+ * Layout and numbers come from documentView(), the same source as the on-screen letter.
  */
 import type { Quotation, UserProfile } from '../types';
 import { formatRupiah } from './quotationEngine';
 import { pdfSafeImageUrl } from './agustaCatalog';
-import { customerAddress, documentView } from './quotationView';
+import { customerAddress, documentView, type DocumentRow } from './quotationView';
+import { COMPANY, letterDate, letterNumber, letterSubject, quotationFileName } from './letter';
 
-export const COMPANY = {
-  address: 'Jl. Industri Raya No. 88, Kawasan Niaga Terpadu, Jakarta 14350',
-  contact: 'Telp. (021) 5890-1234 · sales@agusta.co.id · agusta.co.id',
-};
+export { COMPANY } from './letter';
 
 export type Signer = Pick<UserProfile, 'name' | 'title'>;
 
 export const isIssued = (q: Quotation) => q.status === 'APPROVED' || q.status === 'PDF_SENT';
 
-/** The signing director: the first active Management account. */
-export function getDirector(users: UserProfile[]): Signer {
-  const d = users.find(u => u.role === 'MANAGEMENT' && u.status === 'ACTIVE');
-  return d ?? { name: 'Direktur Komersial', title: 'Direktur Komersial' };
+/** The letter is signed by the Sales person who made it, with their job title. */
+export function signerFor(q: Pick<Quotation, 'salesId' | 'salesName'> | null, users: UserProfile[]): Signer {
+  if (!q) return { name: '', title: '' };
+  const u = users.find(x => x.id === q.salesId);
+  return { name: u?.name ?? q.salesName, title: u?.title ?? '' };
 }
 
 interface PdfImage {
@@ -29,8 +29,8 @@ interface PdfImage {
 }
 
 /** Loads a product photo and flattens it onto white as JPEG, so jsPDF can embed any source format. */
-function loadPdfImage(original: string): Promise<PdfImage | null> {
-  const src = pdfSafeImageUrl(original);
+function loadPdfImage(original: string | undefined): Promise<PdfImage | null> {
+  const src = original ? pdfSafeImageUrl(original) : '';
   if (!src) return Promise.resolve(null);
   return new Promise(resolve => {
     const img = new Image();
@@ -60,205 +60,256 @@ function loadPdfImage(original: string): Promise<PdfImage | null> {
   });
 }
 
-export async function buildQuotationPdf(q: Quotation, director: Signer): Promise<Blob> {
-  const [{ jsPDF }, images] = await Promise.all([import('jspdf'), Promise.all(q.items.map(it => loadPdfImage(it.image)))]);
+/** The standard PDF fonts only cover Latin-1: replace typographic characters. */
+const t = (s: string) => s.replace(/[–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/ /g, ' ');
+const money = (v: number | null) => (v === null ? 'Termasuk' : t(formatRupiah(v)));
+
+export async function buildQuotationPdf(q: Quotation, signer: Signer): Promise<Blob> {
+  const view = documentView(q);
+  const [{ jsPDF }, images] = await Promise.all([import('jspdf'), Promise.all(view.rows.map(r => (r.kind === 'item' ? loadPdfImage(r.image) : Promise.resolve(null))))]);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const navy: [number, number, number] = [29, 42, 110];
   const red: [number, number, number] = [214, 32, 42];
+  const navy: [number, number, number] = [29, 42, 110];
+  const ink: [number, number, number] = [20, 24, 33];
   const L = 18;
   const R = 192;
+  const BOTTOM = 280;
+  const font = (style: 'normal' | 'bold' | 'italic' | 'bolditalic', size: number) => {
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+  };
 
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(22);
+  // ── Letterhead ──
+  // Mark: red ball with white swooshes, as on Agusta's letterhead.
+  doc.setFillColor(...red);
+  doc.circle(L + 6, 19.5, 6, 'F');
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.7);
+  doc.lines([[3, 0.4, 7, -0.6, 10.5, -3.2]], L + 0.8, 18.2);
+  doc.lines([[3.6, 0.5, 8, -0.8, 11.6, -4]], L + 0.2, 21.4);
+  doc.lines([[3.2, 0.1, 6.6, -1.4, 9.4, -4.4]], L + 1.6, 24.4);
+  font('bolditalic', 24);
   doc.setTextColor(...red);
-  doc.text('AGUSTA', L, 22);
-  doc.setFontSize(8);
+  doc.text('AGUSTA', L + 14, 22);
+  font('bolditalic', 8);
   doc.setTextColor(...navy);
-  doc.text('Business & Office Equipment', L, 27);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(90, 90, 90);
-  doc.text(COMPANY.address, R, 20, { align: 'right' });
-  doc.text(COMPANY.contact.replace(/·/g, '|'), R, 25, { align: 'right' });
-  doc.setDrawColor(...navy);
-  doc.setLineWidth(1);
-  doc.line(L, 31, R, 31);
-
-  doc.setFontSize(9);
-  doc.setTextColor(110, 117, 134);
-  doc.text('Kepada Yth.', L, 40);
-  doc.setTextColor(20, 24, 33);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(q.customer.companyName, L, 46);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`u.p. ${q.customer.contactPerson}`, L, 51);
-  const view = documentView(q);
-  const address = customerAddress(q);
-  let infoY = 56;
-  if (address) {
-    const lines = doc.splitTextToSize(address, 95);
-    doc.text(lines, L, infoY);
-    infoY += lines.length * 4;
-  }
-  if (q.customer.phone) doc.text(`Telp. ${q.customer.phone}`, L, infoY);
-
-  [['Nomor', q.quotationNumber], ['Tanggal', q.date], ['Berlaku s.d.', q.validUntil], ['Perihal', 'Penawaran harga']].forEach(
-    ([k, v], i) => {
-      doc.setTextColor(110, 117, 134);
-      doc.text(k!, 135, 40 + i * 5);
-      doc.setTextColor(20, 24, 33);
-      doc.text(v!, 158, 40 + i * 5);
-    }
-  );
-
-  doc.text('Dengan hormat,', L, 72);
-  doc.text(`Bersama surat ini kami sampaikan penawaran harga untuk kebutuhan ${q.customer.companyName}:`, L, 77);
-
-  let y = 84;
-  doc.setFillColor(...navy);
-  doc.rect(L, y, R - L, 8, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.text('No', L + 2, y + 5.3);
-  doc.text('Produk', L + 10, y + 5.3);
-  doc.text('Qty', 118, y + 5.3, { align: 'right' });
-  doc.text('Harga satuan', view.showDiscount ? 146 : 158, y + 5.3, { align: 'right' });
-  if (view.showDiscount) doc.text('Disc.', 160, y + 5.3, { align: 'right' });
-  doc.text('Jumlah', R - 2, y + 5.3, { align: 'right' });
-  y += 14;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(20, 24, 33);
-  const THUMB = 15;
-  const textX = L + 10 + THUMB + 3;
-  const textW = 60;
-  q.items.forEach((it, i) => {
-    doc.setFontSize(9);
-    const name = doc.splitTextToSize(it.productName, textW);
-    doc.setFontSize(7.5);
-    const spec = it.specs ? doc.splitTextToSize(it.specs, textW).slice(0, 3) : [];
-    doc.setFontSize(9);
-    const h = Math.max(name.length * 4 + spec.length * 3.5, THUMB) + 4;
-    if (y + h > 250) {
-      doc.addPage();
-      y = 20;
-    }
-    doc.text(String(i + 1), L + 2, y);
-
-    // Product photo, fitted inside a square frame at the top of the row.
-    const top = y - 3.2;
-    const img = images[i];
-    doc.setDrawColor(227, 230, 236);
-    doc.setLineWidth(0.2);
-    if (img) {
-      const s = Math.min(THUMB / img.w, THUMB / img.h);
-      const w = img.w * s;
-      const ih = img.h * s;
-      doc.addImage(img.data, 'JPEG', L + 10 + (THUMB - w) / 2, top + (THUMB - ih) / 2, w, ih);
-    } else {
-      doc.setFillColor(245, 246, 248);
-      doc.rect(L + 10, top, THUMB, THUMB, 'F');
-      doc.setFontSize(6);
-      doc.setTextColor(110, 117, 134);
-      doc.text('Tanpa foto', L + 10 + THUMB / 2, top + THUMB / 2 + 1, { align: 'center' });
-      doc.setTextColor(20, 24, 33);
-      doc.setFontSize(9);
-    }
-    doc.rect(L + 10, top, THUMB, THUMB, 'S');
-
-    doc.setFont('helvetica', 'bold');
-    doc.text(name, textX, y);
-    doc.setFont('helvetica', 'normal');
-    if (spec.length) {
-      doc.setFontSize(7.5);
-      doc.setTextColor(90, 90, 90);
-      doc.text(spec, textX, y + name.length * 4);
-      doc.setTextColor(20, 24, 33);
-      doc.setFontSize(9);
-    }
-    doc.text(`${it.qty} ${it.unit}`, 118, y, { align: 'right' });
-    const line = view.lines[i]!;
-    doc.text(formatRupiah(line.unitPrice), view.showDiscount ? 146 : 158, y, { align: 'right' });
-    if (view.showDiscount) doc.text(line.discountText === '–' ? '-' : line.discountText!, 160, y, { align: 'right' });
-    doc.text(formatRupiah(it.subtotal), R - 2, y, { align: 'right' });
-    y += h;
-    doc.setDrawColor(227, 230, 236);
-    doc.setLineWidth(0.2);
-    doc.line(L, y - 3, R, y - 3);
-    y += 2;
+  doc.text('Business & Office Equipment', L + 14.5, 27);
+  doc.setTextColor(...ink);
+  const HX = 140;
+  font('bold', 7);
+  doc.text(COMPANY.name, HX, 15);
+  font('normal', 7);
+  [COMPANY.street, COMPANY.city, COMPANY.country].forEach((line, i) => doc.text(line, HX, 18.5 + i * 3.3));
+  [
+    ['Telephone', COMPANY.phone],
+    ['WA Center', COMPANY.whatsapp],
+    ['Email', COMPANY.email],
+  ].forEach(([k, v], i) => {
+    font(k === 'Email' ? 'bold' : 'normal', 7);
+    doc.text(k!, HX, 30 + i * 3.3);
+    doc.text(`: ${v}`, HX + 16, 30 + i * 3.3);
   });
 
-  const row = (label: string, value: string, bold = false) => {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    // Charge labels can be long ("Ongkir ke Bandung"): keep them left of the amount column.
-    doc.text((doc.splitTextToSize(label, 52) as string[])[0]!, L + 87, y);
-    doc.text(value, R - 2, y, { align: 'right' });
-    y += 6;
-  };
-  y += 2;
-  for (const r of view.totals) {
-    if (r.strong) {
-      doc.setDrawColor(...navy);
-      doc.setLineWidth(0.6);
-      doc.line(L + 85, y - 4, R, y - 4);
-      doc.setFontSize(10.5);
-      doc.setFont('helvetica', 'bold');
-      doc.text(r.label, L + 87, y);
-      doc.text(r.value, R - 2, y, { align: 'right' });
-      y += 6;
-      doc.setFontSize(9);
-    } else {
-      row(r.label, r.value);
-    }
+  // ── Date, number, addressee ──
+  let y = 48;
+  font('normal', 10);
+  doc.text(`${COMPANY.place}, ${letterDate(q)}`, L, y);
+  y += 7;
+  doc.text('Nomor', L, y);
+  doc.text(`: ${letterNumber(q.quotationNumber)}`, L + 16, y);
+  y += 5;
+  doc.text('Perihal', L, y);
+  doc.text(`: ${letterSubject(q)}`, L + 16, y);
+  y += 9;
+  doc.text('Kepada Yth :', L, y);
+  font('bold', 11);
+  y += 5.5;
+  doc.text(t(q.customer.contactPerson ? `Bapak/Ibu ${q.customer.contactPerson}` : 'Bapak/Ibu'), L, y);
+  y += 5.5;
+  const company = doc.splitTextToSize(t(q.customer.companyName), R - L) as string[];
+  doc.text(company, L, y);
+  y += company.length * 5.5 - 1;
+  font('normal', 10);
+  const address = customerAddress(q);
+  if (address) {
+    const lines = doc.splitTextToSize(t(address), 110) as string[];
+    doc.text(lines, L, y + 1);
+    y += lines.length * 4.6;
   }
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(90, 90, 90);
-  doc.text(view.taxTerm, L, y + 2);
-  doc.setTextColor(20, 24, 33);
-  doc.setFontSize(9);
+  y += 7;
+  doc.text('Dengan hormat,', L, y);
+  y += 5;
+  doc.text('Dengan ini perkenankanlah kami mengajukan penawaran harga secara tidak mengikat sebagai berikut :', L, y);
   y += 4;
 
-  if (y > 230) {
-    doc.addPage();
-    y = 20;
+  // ── Table ──
+  const widths = view.showDiscount ? [8, 76, 19, 26, 21, 24] : [8, 92, 20, 28, 26];
+  let cursor = L;
+  const xs = widths.map(w => {
+    const x = cursor;
+    cursor += w;
+    return x;
+  });
+  const colX = (i: number) => xs[i]!;
+  const colW = (i: number) => widths[i]!;
+  const last = widths.length - 1;
+  doc.setDrawColor(40, 40, 40);
+  doc.setLineWidth(0.25);
+
+  const header = () => {
+    const h = 10;
+    doc.setFillColor(242, 243, 245);
+    doc.rect(L, y, R - L, h, 'F');
+    font('bold', 8.5);
+    const heads = view.showDiscount
+      ? ['No', 'Nama dan Spesifikasi Produk', 'Qty', 'Harga Satuan', 'Discount', 'Total Harga']
+      : ['No', 'Nama dan Spesifikasi Produk', 'Qty', 'Harga Satuan', 'Total Harga'];
+    heads.forEach((label, i) => {
+      doc.rect(colX(i), y, colW(i), h, 'S');
+      doc.text(label, colX(i) + colW(i) / 2, y + 6.2, { align: 'center' });
+    });
+    y += h;
+  };
+  header();
+
+  const IMG = 20;
+  const drawRow = (r: DocumentRow, img: PdfImage | null) => {
+    const descW = colW(1) - 4 - (img ? IMG + 2 : 0);
+    font('bold', 9);
+    const title = doc.splitTextToSize(t(r.title), descW) as string[];
+    font('normal', 8);
+    const detail = r.detail.flatMap(d => doc.splitTextToSize(t(d), descW) as string[]);
+    font('bolditalic', 8);
+    const note = r.note ? (doc.splitTextToSize(t(r.note), descW) as string[]) : [];
+    const textH = title.length * 4 + (detail.length ? 1 + detail.length * 3.6 : 0) + (note.length ? 1.5 + note.length * 3.6 : 0);
+    const h = Math.max(textH + 4, img ? IMG + 4 : 0, 9);
+    if (y + h > BOTTOM) {
+      doc.addPage();
+      y = 18;
+      header();
+    }
+    widths.forEach((_, i) => doc.rect(colX(i), y, colW(i), h, 'S'));
+    const top = y + 4.8;
+    font('normal', 9);
+    doc.text(String(r.no), colX(0) + colW(0) / 2, top, { align: 'center' });
+    let ty = top;
+    font('bold', 9);
+    doc.text(title, colX(1) + 2, ty);
+    ty += title.length * 4;
+    if (detail.length) {
+      font('normal', 8);
+      ty += 1;
+      doc.text(detail, colX(1) + 2, ty - 0.4);
+      ty += detail.length * 3.6;
+    }
+    if (note.length) {
+      font('bolditalic', 8);
+      ty += 1.5;
+      doc.text(note, colX(1) + 2, ty - 0.4);
+    }
+    if (img) {
+      const s = Math.min(IMG / img.w, IMG / img.h);
+      doc.addImage(img.data, 'JPEG', colX(1) + colW(1) - 2 - img.w * s, y + 2, img.w * s, img.h * s);
+    }
+    font('normal', 9);
+    doc.text(`${r.qty} ${r.unit}`, colX(2) + colW(2) / 2, top, { align: 'center' });
+    doc.text(money(r.unitPrice), colX(3) + colW(3) - 2, top, { align: 'right' });
+    if (view.showDiscount) doc.text(t(r.discountText ?? ''), colX(4) + colW(4) - 2, top, { align: 'right' });
+    if (r.amount !== null) doc.text(money(r.amount), colX(last) + colW(last) - 2, top, { align: 'right' });
+    y += h;
+  };
+  view.rows.forEach((r, i) => drawRow(r, images[i] ?? null));
+
+  for (const row of view.totals) {
+    if (y + 7 > BOTTOM) {
+      doc.addPage();
+      y = 18;
+    }
+    font(row.strong ? 'bold' : 'normal', 9);
+    doc.rect(L, y, colX(last) - L, 7, 'S');
+    doc.rect(colX(last), y, colW(last), 7, 'S');
+    doc.text(t(row.label), colX(last) - 2, y + 4.8, { align: 'right' });
+    doc.text(t(row.value), R - 2, y + 4.8, { align: 'right' });
+    y += 7;
   }
+
+  // ── Keterangan ──
+  const ensure = (need: number) => {
+    if (y + need > BOTTOM) {
+      doc.addPage();
+      y = 18;
+    }
+  };
+  y += 7;
+  ensure(12);
+  font('normal', 9.5);
+  doc.text('Keterangan :', L, y);
+  y += 5;
+  const bullet = (lines: string[]) => {
+    ensure(lines.length * 4.4 + 1);
+    doc.circle(L + 3, y - 1.2, 0.7, 'F');
+    doc.text(lines, L + 6, y);
+    y += lines.length * 4.4 + 0.6;
+  };
+  doc.setFillColor(...ink);
+  for (const term of view.terms) bullet(doc.splitTextToSize(t(term), R - L - 8) as string[]);
+  if (view.paymentTerms.length) {
+    bullet(['Termin Pembayaran']);
+    for (const p of view.paymentTerms) {
+      ensure(6);
+      doc.rect(L + 6, y - 3.8, 60, 5.4, 'S');
+      doc.rect(L + 66, y - 3.8, 20, 5.4, 'S');
+      doc.text(t(p.label), L + 8, y);
+      doc.text(`${p.percent}%`, L + 84, y, { align: 'right' });
+      y += 5.4;
+    }
+    y += 1;
+  }
+  bullet(['Pembayaran dapat ditransfer ke rekening perusahaan']);
+  ensure(14);
+  font('bold', 9.5);
+  doc.text(COMPANY.bank.name, L + 22, y);
+  font('normal', 9.5);
+  doc.text('an. ', L + 22, y + 4.4);
+  font('bold', 9.5);
+  doc.text(COMPANY.bank.holder, L + 22 + doc.getTextWidth('an. '), y + 4.4);
+  font('normal', 9.5);
+  doc.text('rek. ', L + 22, y + 8.8);
+  font('bold', 9.5);
+  doc.text(COMPANY.bank.account, L + 22 + doc.getTextWidth('rek. '), y + 8.8);
+  y += 15;
+
+  // ── Closing & signature ──
+  ensure(40);
+  font('normal', 9.5);
+  doc.text('Kami tunggu kabar baik selanjutnya, atas perhatian dan kerjasamanya kami ucapkan terima kasih.', L, y);
   y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.text('Demikian penawaran ini kami sampaikan. Atas perhatian dan kerja samanya kami ucapkan terima kasih.', L, y);
-  y += 10;
   doc.text('Hormat kami,', L, y);
-  doc.text('Mengetahui,', 120, y);
   if (isIssued(q)) {
     doc.setDrawColor(...navy);
     doc.setLineWidth(0.5);
-    [L, 120].forEach(x => {
-      doc.lines([[8, -6], [6, 8], [10, -9], [8, 7], [10, -4]], x + 2, y + 16);
-    });
+    doc.lines([[8, -6], [6, 8], [10, -9], [8, 7], [10, -4]], L + 2, y + 15);
   }
-  y += 24;
-  doc.setFont('helvetica', 'bold');
-  doc.text(q.salesName, L, y);
-  doc.text(director.name, 120, y);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text('Account Executive', L, y + 4.5);
-  doc.text(director.title, 120, y + 4.5);
-  if (isIssued(q)) {
-    doc.setTextColor(110, 117, 134);
-    doc.text(`Ditandatangani secara elektronik. Disetujui oleh ${q.reviewedBy ?? '-'} pada ${q.reviewedAt ?? '-'}.`, L, 285);
+  y += 22;
+  font('bold', 9.5);
+  const name = t(signer.name.toUpperCase());
+  doc.text(name, L, y);
+  doc.setDrawColor(...ink);
+  doc.setLineWidth(0.3);
+  doc.line(L, y + 0.8, L + doc.getTextWidth(name), y + 0.8);
+  if (signer.title) {
+    doc.text(t(signer.title), L, y + 4.6);
   }
 
   return doc.output('blob');
 }
 
-export async function downloadQuotationPdf(q: Quotation, director: Signer) {
-  const blob = await buildQuotationPdf(q, director);
+export async function downloadQuotationPdf(q: Quotation, signer: Signer) {
+  const blob = await buildQuotationPdf(q, signer);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Penawaran_${q.quotationNumber}.pdf`;
+  a.download = quotationFileName({ quotationNumber: q.quotationNumber, customerName: q.customer.companyName, revisionNo: q.revisionNo });
   document.body.appendChild(a);
   a.click();
   a.remove();

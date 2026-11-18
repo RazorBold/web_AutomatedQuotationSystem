@@ -10,6 +10,8 @@ export interface UserProfile {
   phone: string;
   email: string;
   status: UserStatus;
+  /** Letter code in quotation numbers, e.g. FHM in 0088/FHM/AG/VIII/26 (Sales). */
+  quoteCode?: string;
   /** Local demo mode only. With Supabase, passwords live (hashed) in Supabase Auth and never reach the client. */
   password?: string;
   createdAt: string;
@@ -29,7 +31,29 @@ export interface QuotationCharge {
   kind: ChargeKind;
   /** Free text shown on the document, e.g. "Jasa pasang 20 unit" or "Ongkir ke Bandung". */
   label: string;
+  /** 0 = printed as "Termasuk" (included at no charge). */
   amount: number;
+  /** Detail shown next to the label on the letter, e.g. "Videotron, panel, dan perapian kabel". */
+  description?: string;
+}
+
+/** How PPN appears on the letter. */
+export type TaxMode = 'ADDED' | 'INCLUDED' | 'EXCLUDED';
+/** How item discounts appear on the letter. */
+export type DiscountMode = 'PERCENT' | 'AMOUNT' | 'HIDDEN';
+
+/** One payment instalment, e.g. Down Payment 35%. */
+export interface PaymentTerm {
+  label: string;
+  percent: number;
+}
+
+/** The letter's presentation: PPN, discounts, "Keterangan" and payment terms. */
+export interface LetterSettings {
+  taxMode: TaxMode;
+  discountMode: DiscountMode;
+  terms: string[];
+  paymentTerms: PaymentTerm[];
 }
 
 /** Forwarding to Management (R7), for a quotation or a custom request. */
@@ -146,6 +170,14 @@ export interface Quotation {
   showTax?: boolean;
   /** PDF display: show the discount column (default true). When false unit prices are shown after discount. */
   showDiscount?: boolean;
+  /** Letter format (supersedes showTax/showDiscount when present). */
+  taxMode?: TaxMode;
+  discountMode?: DiscountMode;
+  /** "Keterangan" lines; undefined = the standard ones. */
+  terms?: string[];
+  paymentTerms?: PaymentTerm[];
+  /** Letter date as yyyy-mm-dd (for "Semarang, 18 November 2026"). */
+  issuedOn?: string;
   /** Additional charges: jasa pasang, ongkir, lainnya (R6). */
   charges?: QuotationCharge[];
   /** Latest forwarding to Management, if any (R7). */

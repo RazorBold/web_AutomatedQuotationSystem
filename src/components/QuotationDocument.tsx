@@ -3,17 +3,19 @@ import { Check, Copy, Download, Printer, Send, X } from 'lucide-react';
 import type { Quotation } from '../types';
 import { formatRupiah, formatWhatsAppQuotationMessage } from '../utils/quotationEngine';
 import { buildWhatsAppTemplatePayload } from '../utils/whatsapp';
-import { COMPANY, Signer, downloadQuotationPdf, getDirector, isIssued } from '../utils/quotationPdf';
+import { Signer, downloadQuotationPdf, isIssued, signerFor } from '../utils/quotationPdf';
 import { customerAddress, documentView } from '../utils/quotationView';
+import { COMPANY, letterDate, letterNumber, letterSubject, quotationFileName } from '../utils/letter';
 import { AgustaLogo } from './AgustaLogo';
 import { Button, Dialog, IconButton, ProductImage } from './ui';
 import { errorMessage, useStore } from '../store/AppStore';
 
 export { downloadQuotationPdf } from '../utils/quotationPdf';
 
-export function useDirector(): Signer {
-  const { users } = useStore();
-  return getDirector(users);
+/** Who signs the letter: the Sales person who made it (Agusta's practice). */
+export function useSigner(q: Quotation | null): Signer {
+  const { users, currentUser } = useStore();
+  return signerFor(q, currentUser ? [currentUser, ...users] : users);
 }
 
 /** Hand-drawn style e-signature mark, generated from the signer's name so each signer gets a stable shape. */
@@ -35,12 +37,16 @@ function Signature({ name }: { name: string }) {
   );
 }
 
-/** The official quotation letter, rendered as an A4 sheet. Never shows COGS or margin. */
+const money = (v: number | null) => (v === null ? 'Termasuk' : formatRupiah(v));
+const CELL = 'border border-ink/70 px-2 py-1.5';
+
+/** The official quotation letter in Agusta's format, rendered as an A4 sheet. Never shows COGS or margin. */
 export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
-  const director = useDirector();
+  const signer = useSigner(q);
   const issued = isIssued(q);
   const view = documentView(q);
   const address = customerAddress(q);
+  const cols = view.showDiscount ? 6 : 5;
   return (
     <article className="print-sheet relative mx-auto w-full max-w-[794px] bg-white px-8 py-9 text-[12.5px] leading-relaxed text-ink shadow-paper sm:px-14 sm:py-12">
       {!issued && (
@@ -49,136 +55,157 @@ export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
         </p>
       )}
 
-      <header className="flex flex-col gap-4 border-b-[3px] border-navy pb-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <AgustaLogo size="lg" />
-        <div className="text-[11px] text-ink-2 sm:text-right">
-          <p>{COMPANY.address}</p>
-          <p>{COMPANY.contact}</p>
+        <div className="text-[10.5px] leading-snug text-ink-2">
+          <p className="font-bold text-ink">{COMPANY.name}</p>
+          <p>{COMPANY.street}</p>
+          <p>{COMPANY.city}</p>
+          <p>{COMPANY.country}</p>
+          <table className="mt-1.5">
+            <tbody>
+              {[
+                ['Telephone', COMPANY.phone],
+                ['WA Center', COMPANY.whatsapp],
+                ['Email', COMPANY.email],
+              ].map(([k, v]) => (
+                <tr key={k}>
+                  <td className="pr-3">{k}</td>
+                  <td className={k === 'Email' ? 'font-bold text-ink' : ''}>: {v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </header>
 
-      <div className="mt-6 flex flex-col justify-between gap-6 sm:flex-row">
-        <div>
-          <p className="text-ink-3">Kepada Yth.</p>
-          <p className="text-[14px] font-bold">{q.customer.companyName}</p>
-          <p>u.p. {q.customer.contactPerson}</p>
-          {address && <p className="max-w-[40ch] text-ink-2">{address}</p>}
-          {q.customer.phone && <p className="text-ink-2">Telp. {q.customer.phone}</p>}
-        </div>
-        <table className="h-fit text-[12px]">
-          <tbody>
-            {[
-              ['Nomor', q.quotationNumber],
-              ['Tanggal', q.date],
-              ['Berlaku s.d.', q.validUntil],
-              ['Perihal', 'Penawaran harga'],
-            ].map(([k, v]) => (
-              <tr key={k}>
-                <td className="pr-4 text-ink-3">{k}</td>
-                <td className={k === 'Nomor' ? 'font-mono font-semibold' : 'font-medium'}>{v}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <p className="mt-7">
+        {COMPANY.place}, {letterDate(q)}
+      </p>
+      <table className="mt-2">
+        <tbody>
+          <tr>
+            <td className="pr-3">Nomor</td>
+            <td>: {letterNumber(q.quotationNumber)}</td>
+          </tr>
+          <tr>
+            <td className="pr-3">Perihal</td>
+            <td>: {letterSubject(q)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="mt-4">
+        <p>Kepada Yth :</p>
+        <p className="text-[14px] font-bold">{q.customer.contactPerson ? `Bapak/Ibu ${q.customer.contactPerson}` : 'Bapak/Ibu'}</p>
+        <p className="text-[14px] font-bold">{q.customer.companyName}</p>
+        {address && <p className="max-w-[48ch]">{address}</p>}
       </div>
 
-      <p className="mt-6">Dengan hormat,</p>
-      <p className="mt-1 max-w-[75ch]">
-        Bersama surat ini kami sampaikan penawaran harga untuk kebutuhan {q.customer.companyName} dengan rincian sebagai
-        berikut:
-      </p>
+      <p className="mt-5">Dengan hormat,</p>
+      <p>Dengan ini perkenankanlah kami mengajukan penawaran harga secara tidak mengikat sebagai berikut :</p>
 
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-[12px]">
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[560px] border-collapse text-[11.5px]">
           <thead>
-            <tr className="bg-navy text-left text-white">
-              <th className="w-8 px-2 py-2 font-semibold">No</th>
-              <th className="px-2 py-2 font-semibold">Produk &amp; spesifikasi</th>
-              <th className="px-2 py-2 text-right font-semibold">Qty</th>
-              <th className="px-2 py-2 text-right font-semibold">Harga satuan</th>
-              {view.showDiscount && <th className="px-2 py-2 text-right font-semibold">Disc.</th>}
-              <th className="px-2 py-2 text-right font-semibold">Jumlah</th>
+            <tr className="bg-canvas text-center font-bold">
+              <th className={`${CELL} w-8`}>No</th>
+              <th className={CELL}>Nama dan Spesifikasi Produk</th>
+              <th className={`${CELL} w-16`}>Qty</th>
+              <th className={`${CELL} w-[104px]`}>Harga Satuan</th>
+              {view.showDiscount && <th className={`${CELL} w-[92px]`}>Discount</th>}
+              <th className={`${CELL} w-[108px]`}>Total Harga</th>
             </tr>
           </thead>
           <tbody>
-            {view.lines.map(({ item: it, unitPrice, discountText }, i) => (
-              <tr key={it.id} className="border-b border-line align-top">
-                <td className="px-2 py-3 text-ink-3">{i + 1}</td>
-                <td className="px-2 py-3">
-                  <div className="flex gap-3">
-                    <ProductImage src={it.image} alt="" hint={it.category} className="size-14 shrink-0 rounded border border-line" />
+            {view.rows.map(r => (
+              <tr key={`${r.kind}-${r.no}`} className="align-top">
+                <td className={`${CELL} text-center`}>{r.no}</td>
+                <td className={CELL}>
+                  <div className="flex justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-semibold">{it.productName}</p>
-                      <p className="text-[11px] text-ink-3">SKU {it.sku}</p>
-                      {it.specs && <p className="mt-0.5 line-clamp-2 text-[11px] text-ink-2">{it.specs}</p>}
-                      {it.notes && <p className="mt-0.5 text-[11px] italic text-ink-2">Catatan: {it.notes}</p>}
+                      <p className="font-bold">{r.title}</p>
+                      {r.detail.length > 0 && (
+                        <div className="mt-1 text-[11.5px]">
+                          {r.detail.map((d, i) => (
+                            <p key={i}>{d}</p>
+                          ))}
+                        </div>
+                      )}
+                      {r.note && <p className="mt-1 whitespace-pre-line text-[11.5px] font-semibold italic">{r.note}</p>}
                     </div>
+                    {r.kind === 'item' && r.image && (
+                      <ProductImage src={r.image} alt="" hint={r.category} className="size-14 shrink-0 sm:size-16" />
+                    )}
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums">
-                  {it.qty} {it.unit}
+                <td className={`${CELL} whitespace-nowrap text-center`}>
+                  {r.qty} {r.unit}
                 </td>
-                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums">{formatRupiah(unitPrice)}</td>
-                {view.showDiscount && <td className="px-2 py-3 text-right tabular-nums">{discountText}</td>}
-                <td className="whitespace-nowrap px-2 py-3 text-right font-semibold tabular-nums">{formatRupiah(it.subtotal)}</td>
+                <td className={`${CELL} whitespace-nowrap text-right tabular-nums`}>{money(r.unitPrice)}</td>
+                {view.showDiscount && <td className={`${CELL} whitespace-nowrap text-right tabular-nums`}>{r.discountText}</td>}
+                <td className={`${CELL} whitespace-nowrap text-right tabular-nums`}>{r.amount === null ? '' : formatRupiah(r.amount)}</td>
+              </tr>
+            ))}
+            {view.totals.map(t => (
+              <tr key={t.label} className={t.strong ? 'font-bold' : ''}>
+                <td colSpan={cols - 1} className={`${CELL} text-right`}>
+                  {t.label}
+                </td>
+                <td className={`${CELL} whitespace-nowrap text-right tabular-nums`}>{t.value}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="mt-4 flex justify-end">
-        <dl className="w-full max-w-[300px] text-[12.5px]">
-          {view.totals.map(r =>
-            r.strong ? (
-              <div key={r.label} className="mt-1 flex justify-between gap-4 border-t-2 border-navy pt-2 text-[14px] font-bold">
-                <dt>{r.label}</dt>
-                <dd className="whitespace-nowrap tabular-nums">{r.value}</dd>
-              </div>
-            ) : (
-              <div key={r.label} className="flex justify-between gap-4 py-1">
-                <dt className="text-ink-2">{r.label}</dt>
-                <dd className="whitespace-nowrap tabular-nums">{r.value}</dd>
-              </div>
-            )
+      <div className="mt-5 text-[12px]">
+        <p>Keterangan :</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-6">
+          {view.terms.map((t, i) => (
+            <li key={i}>{t}</li>
+          ))}
+          {view.paymentTerms.length > 0 && (
+            <li>
+              Termin Pembayaran
+              <table className="mt-1 border-collapse">
+                <tbody>
+                  {view.paymentTerms.map(p => (
+                    <tr key={p.label}>
+                      <td className={`${CELL} w-56 py-0.5`}>{p.label}</td>
+                      <td className={`${CELL} w-20 py-0.5 text-right tabular-nums`}>{p.percent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </li>
           )}
-        </dl>
+          <li>
+            Pembayaran dapat ditransfer ke rekening perusahaan
+            <div className="mt-0.5 pl-12">
+              <p className="font-bold">{COMPANY.bank.name}</p>
+              <p>
+                an. <span className="font-bold">{COMPANY.bank.holder}</span>
+              </p>
+              <p>
+                rek. <span className="font-bold">{COMPANY.bank.account}</span>
+              </p>
+            </div>
+          </li>
+        </ul>
       </div>
 
-      <div className="mt-6 max-w-[75ch] text-[11.5px] text-ink-2">
-        <p className="font-semibold text-ink">Syarat &amp; ketentuan</p>
-        <ol className="mt-1 list-decimal pl-4">
-          <li>{view.taxTerm}</li>
-          <li>Penawaran berlaku sampai {q.validUntil}. Ketersediaan stok mengikuti saat PO diterima.</li>
-          <li>Garansi resmi sesuai ketentuan masing-masing merek.</li>
-        </ol>
+      <p className="mt-4">Kami tunggu kabar baik selanjutnya, atas perhatian dan kerjasamanya kami ucapkan terima kasih.</p>
+
+      <div className="mt-3">
+        <p>Hormat kami,</p>
+        <div className="flex h-16 items-end">{issued ? <Signature name={signer.name} /> : <span className="text-[11px] text-ink-3">Menunggu persetujuan</span>}</div>
+        <p className="font-bold uppercase underline underline-offset-2">{signer.name}</p>
+        {signer.title && <p className="font-semibold">{signer.title}</p>}
       </div>
-
-      <p className="mt-6">Demikian penawaran ini kami sampaikan. Atas perhatian dan kerja samanya kami ucapkan terima kasih.</p>
-
-      <div className="mt-6 grid grid-cols-2 gap-8">
-        {[
-          { caption: 'Hormat kami,', name: q.salesName, title: 'Account Executive' },
-          { caption: 'Mengetahui,', name: director.name, title: director.title },
-        ].map(s => (
-          <div key={s.caption}>
-            <p>{s.caption}</p>
-            <div className="flex h-16 items-end">{issued ? <Signature name={s.name} /> : <span className="text-[11px] text-ink-3">Menunggu persetujuan</span>}</div>
-            <p className="mt-1 font-bold underline underline-offset-2">{s.name}</p>
-            <p className="text-[11px] text-ink-2">{s.title}</p>
-          </div>
-        ))}
-      </div>
-
-      {issued && (
-        <p className="mt-8 border-t border-line pt-3 text-[10.5px] text-ink-3">
-          Ditandatangani secara elektronik melalui Agusta Quotation System. Disetujui oleh {q.reviewedBy} pada {q.reviewedAt}.
-        </p>
-      )}
     </article>
   );
 }
-
 
 export function PdfDialog({
   quotation,
@@ -191,7 +218,7 @@ export function PdfDialog({
   onClose: () => void;
   onSendWhatsApp?: (q: Quotation) => void;
 }) {
-  const director = useDirector();
+  const signer = useSigner(quotation);
   if (!quotation) return null;
   return (
     <Dialog open={open} onClose={onClose} title={`Dokumen ${quotation.quotationNumber}`} width="max-w-[880px]" bare>
@@ -209,7 +236,7 @@ export function PdfDialog({
               WhatsApp
             </Button>
           )}
-          <Button size="sm" variant="primary" icon={<Download className="size-4" />} onClick={() => downloadQuotationPdf(quotation, director)}>
+          <Button size="sm" variant="primary" icon={<Download className="size-4" />} onClick={() => downloadQuotationPdf(quotation, signer)}>
             Unduh PDF
           </Button>
           <IconButton label="Tutup" onClick={onClose}>
@@ -246,7 +273,7 @@ export function WhatsAppDialog({
     quotationNumber: quotation.quotationNumber,
     customerName: quotation.customer.companyName,
     totalAmount: documentView(quotation).headlineTotal,
-    includesTax: quotation.showTax !== false,
+    includesTax: documentView(quotation).taxMode !== 'EXCLUDED',
     approvedBy: quotation.reviewedBy ?? currentUser?.name ?? 'Sales Support',
     approvalDate: quotation.reviewedAt ?? '',
     downloadUrl: pdfUrl,
@@ -257,7 +284,7 @@ export function WhatsAppDialog({
     quotationNumber: quotation.quotationNumber,
     customerName: quotation.customer.companyName,
     grandTotal: documentView(quotation).headlineTotal,
-    includesTax: quotation.showTax !== false,
+    includesTax: documentView(quotation).taxMode !== 'EXCLUDED',
     pdfUrl,
   });
   const alreadySent = quotation.status === 'PDF_SENT';
@@ -306,7 +333,7 @@ export function WhatsAppDialog({
         <div className="ml-auto max-w-[92%] rounded-lg rounded-tr-none bg-[#dcf8c6] p-3 text-[12.5px] leading-relaxed text-[#1f2c33] shadow-[0_1px_1px_rgb(0_0_0/0.12)]">
           <div className="mb-2 flex items-center gap-2 rounded-md bg-white/70 px-2.5 py-2">
             <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">PDF</span>
-            <span className="truncate font-medium">Penawaran_{quotation.quotationNumber}.pdf</span>
+            <span className="truncate font-medium">{quotationFileName({ quotationNumber: quotation.quotationNumber, customerName: quotation.customer.companyName, revisionNo: quotation.revisionNo })}</span>
           </div>
           <p className="whitespace-pre-line">{message.replace(/\*/g, '').replace(/_/g, '')}</p>
         </div>

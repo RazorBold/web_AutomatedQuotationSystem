@@ -16,7 +16,11 @@ function generatePassword() {
 }
 
 function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: boolean; onClose: () => void }) {
-  const { addUser, updateUser, notify, currentUser } = useStore();
+  const { addUser, updateUser, setQuoteCode, quoteCounters, notify, currentUser } = useStore();
+  const [code, setCode] = useState('');
+  const [lastNo, setLastNo] = useState('');
+  const [counters, setCounters] = useState<Record<string, number>>({});
+  const effectiveCode = code.trim().toUpperCase() || (user && /^[A-Z]{2,5}$/.test(user.avatar) ? user.avatar : 'AG');
   const isNew = !user;
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'form', string>>>({});
@@ -31,6 +35,9 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
     setForm(user ? { name: user.name, email: user.email, phone: user.phone, title: user.title, role: user.role, status: user.status, password: '' } : { ...EMPTY, password: generatePassword() });
     setErrors({});
     setResetPw(false);
+    setCode(user?.quoteCode ?? '');
+    setLastNo('');
+    if (open && user) void quoteCounters().then(setCounters).catch(() => setCounters({}));
   }
 
   const isSelf = user?.id === currentUser?.id;
@@ -45,6 +52,8 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
     if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Isi email kantor yang valid, contoh: nama@agusta.co.id';
     if (form.phone.replace(/\D/g, '').length < 9) e.phone = 'Isi nomor WhatsApp aktif. Notifikasi PDF dikirim ke nomor ini.';
     if ((isNew || resetPw) && form.password.length < 8) e.password = 'Kata sandi minimal 8 karakter.';
+    const codeChanged = !isNew && form.role === 'SALES' && (code.trim().toUpperCase() !== (user?.quoteCode ?? '') || lastNo.trim() !== '');
+    if (codeChanged && code.trim() && !/^[A-Za-z]{2,5}$/.test(code.trim())) e.form = 'Kode surat 2–5 huruf, mis. FHM.';
     setErrors(e);
     if (Object.keys(e).length) return;
 
@@ -59,6 +68,14 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
     if (!res.ok) {
       setErrors({ form: res.error });
       return;
+    }
+    if (codeChanged) {
+      try {
+        await setQuoteCode(user!.id, code, lastNo.trim() === '' ? undefined : Number(lastNo));
+      } catch (err) {
+        setErrors({ form: errorMessage(err) });
+        return;
+      }
     }
     notify(isNew ? `Akun ${form.name} dibuat. Bagikan kata sandi sementaranya.` : `Perubahan akun ${form.name} disimpan.`);
     onClose();
@@ -140,6 +157,20 @@ function UserDrawer({ user, open, onClose }: { user: UserProfile | null; open: b
               })}
             </div>
           </fieldset>
+
+          {form.role === 'SALES' && !isNew && (
+            <fieldset className="rounded-lg border border-line px-3.5 py-3">
+              <legend className="px-1 text-[13px] font-semibold text-ink">Nomor surat penawaran</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Kode surat" optional hint={`Contoh nomor: 0001/${effectiveCode}/AG/…`}>
+                  {p => <Input {...p} value={code} maxLength={5} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))} placeholder={user?.avatar || 'FHM'} />}
+                </Field>
+                <Field label={`Nomor terakhir ${new Date().getFullYear()}`} optional hint={`Saat ini ${counters[effectiveCode] ?? 0}. Isi bila nomor manual sudah lebih jauh.`}>
+                  {p => <Input {...p} inputMode="numeric" value={lastNo} onChange={e => setLastNo(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder={String(counters[effectiveCode] ?? 0)} />}
+                </Field>
+              </div>
+            </fieldset>
+          )}
 
           {isNew || resetPw ? (
             <Field label={isNew ? 'Kata sandi sementara' : 'Kata sandi baru'} error={errors.password} hint={!errors.password ? 'Minta user menggantinya setelah masuk pertama kali.' : undefined}>

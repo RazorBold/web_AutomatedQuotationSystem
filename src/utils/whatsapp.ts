@@ -5,6 +5,7 @@
  * Imports keep the explicit .js extension so the file also runs as native ESM on Vercel.
  */
 import { formatRupiah } from './quotationEngine.js';
+import { quotationFileName } from './letter.js';
 
 export const DEFAULT_TEMPLATE_NAME = 'agusta_quotation_approved';
 export const DEFAULT_TEMPLATE_LANG = 'id';
@@ -49,7 +50,7 @@ export function buildWhatsAppTemplatePayload(p: WhatsAppQuotationParams) {
       components: [
         {
           type: 'header',
-          parameters: [{ type: 'document', document: { link: p.pdfUrl, filename: `Penawaran_${p.quotationNumber}.pdf` } }],
+          parameters: [{ type: 'document', document: { link: p.pdfUrl, filename: quotationFileName({ quotationNumber: p.quotationNumber, customerName: p.customerName }) } }],
         },
         {
           type: 'body',

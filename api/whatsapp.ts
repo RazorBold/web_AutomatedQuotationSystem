@@ -7,6 +7,7 @@
  */
 import { admin, handle, HttpError, json, readJson, requireCaller } from './_lib/server.js';
 import { buildWhatsAppTemplatePayload, normalizeWhatsAppNumber, type WhatsAppSendResult } from '../src/utils/whatsapp.js';
+import { quotationFileName } from '../src/utils/letter.js';
 
 const LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -31,7 +32,7 @@ export const POST = handle(async request => {
 
   const { data: signed, error: signError } = await db.storage
     .from('quotations')
-    .createSignedUrl(q.pdf_path, LINK_TTL_SECONDS, { download: `Penawaran_${q.quotation_number}.pdf` });
+    .createSignedUrl(q.pdf_path, LINK_TTL_SECONDS, { download: quotationFileName({ quotationNumber: q.quotation_number, customerName: (q.customer as { companyName?: string })?.companyName ?? '' }) });
   if (signError || !signed) throw new HttpError(500, `Link PDF gagal dibuat: ${signError?.message ?? 'unknown'}`);
 
   const payload = buildWhatsAppTemplatePayload({

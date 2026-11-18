@@ -3,13 +3,15 @@ import { Check, ChevronLeft, MessageSquarePlus, Minus, PackageSearch, Plus, Sear
 import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { SmartSuggestions } from '../components/SmartSuggestions';
 import { DiscountInput, RupiahInput } from '../components/DiscountInput';
-import { ChargesEditor, chargesTotal, cleanCharges } from '../components/ChargesEditor';
+import { ChargesEditor, chargeRows, chargesTotal, cleanCharges } from '../components/ChargesEditor';
+import { LetterEditor, cleanLetter, letterProblems } from '../components/LetterEditor';
+import { DEFAULT_LETTER, letterSettingsOf } from '../utils/letter';
 import type { ChargeInput } from '../backend';
 import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
 import { AgustaWebResults } from '../components/AgustaWebResults';
 import { agustaImageUrl } from '../utils/agustaCatalog';
 import { parseSalesRequest } from '../utils/smartSearch';
-import type { CustomerCategory, CustomerInfo, Quotation } from '../types';
+import type { CustomerCategory, CustomerInfo, LetterSettings, Quotation } from '../types';
 import { Button, EmptyState, Field, Input, PageHeader, Panel, ProductImage, Textarea, cx } from '../components/ui';
 import { QuotationSheet } from '../components/QuotationDocument';
 import { calculateLineSubtotal, formatRupiah, getSuggestedDiscount, smartProductSearch } from '../utils/quotationEngine';
@@ -69,7 +71,8 @@ export function QuotationWizard({
   });
   const [salesNotes, setSalesNotes] = useState(editing?.salesNotes ?? '');
   const [extraDiscount, setExtraDiscount] = useState(editing?.extraDiscount ?? 0);
-  const [charges, setCharges] = useState<ChargeInput[]>(() => (editing?.charges ?? []).map(({ id: _id, ...c }) => c));
+  const [charges, setCharges] = useState<ChargeInput[]>(() => chargeRows(editing?.charges));
+  const [letter, setLetter] = useState<LetterSettings>(() => (editing ? letterSettingsOf(editing) : DEFAULT_LETTER));
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Semua');
   const [submitting, setSubmitting] = useState(false);
@@ -151,6 +154,11 @@ export function QuotationWizard({
   };
 
   const submit = () => {
+    const problems = letterProblems(letter);
+    if (problems.length) {
+      notify(problems[0]!, 'error');
+      return;
+    }
     setSubmitting(true);
     createQuotation(
       {
@@ -158,6 +166,7 @@ export function QuotationWizard({
         salesNotes,
         extraDiscount: appliedExtra,
         charges: cleanCharges(charges),
+        letter: cleanLetter(letter),
         items: lines.map(l => ({ productId: l.productId, qty: l.qty, discountPercent: l.discountPercent, notes: l.notes })),
       },
       editing?.id
@@ -176,7 +185,9 @@ export function QuotationWizard({
     step === 2 && currentUser
       ? {
           id: 'preview',
-          quotationNumber: editing?.quotationNumber ?? 'QTN-DRAF',
+          quotationNumber: editing?.quotationNumber ?? 'DRAF',
+          issuedOn: new Date().toISOString().slice(0, 10),
+          ...cleanLetter(letter),
           date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
           validUntil: new Date(Date.now() + 14 * 86400000).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
           status: 'DRAFT',
@@ -523,7 +534,7 @@ export function QuotationWizard({
                 </div>
                 <div className="border-t border-dashed border-line pt-2">
                   <dt className="mb-1.5 text-ink-2">
-                    Biaya tambahan <span className="text-xs text-ink-3">(kena PPN, opsional)</span>
+                    Jasa &amp; biaya tambahan <span className="text-xs text-ink-3">(kena PPN, opsional)</span>
                   </dt>
                   <dd>
                     <ChargesEditor charges={charges} onChange={setCharges} />
@@ -564,6 +575,9 @@ export function QuotationWizard({
                 placeholder="Urgensi, permintaan margin khusus, pesaing yang ikut tender…"
               />
               <p className="mt-2 text-xs text-ink-3">Harga final, HPP, dan tanda tangan diisi setelah disetujui Sales Support.</p>
+            </Panel>
+            <Panel title="Format surat" description="Tampilan PPN, diskon, keterangan, dan termin pembayaran. Pratinjau di kiri langsung berubah.">
+              <LetterEditor value={letter} onChange={setLetter} />
             </Panel>
           </aside>
         </div>

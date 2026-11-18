@@ -1,4 +1,4 @@
-import type { AppNotification, CustomProductRequest, CustomerInfo, FollowUpStatus, LostReason, PriceChange, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, CustomProductRequest, CustomerInfo, FollowUpStatus, LetterSettings, LostReason, PriceChange, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
 import type { SupplierSearchResult, SupplierSite } from '../utils/supplierSearch';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
@@ -35,9 +35,12 @@ export interface NewQuotationInput {
   extraDiscount?: number;
   /** Additional charges (jasa pasang, ongkir, lainnya). */
   charges?: ChargeInput[];
+  /** Letter format: PPN, discount display, Keterangan, payment terms. */
+  letter?: LetterSettings;
 }
 
-export type ChargeInput = Omit<QuotationCharge, 'id'>;
+/** `included` (editor only): a 0 amount printed as "Termasuk" on purpose. */
+export type ChargeInput = Omit<QuotationCharge, 'id'> & { included?: boolean };
 
 /** Quotation-level settings Sales Support (or Management, while escalated) can change. */
 export interface QuotationAdjustments {
@@ -45,6 +48,7 @@ export interface QuotationAdjustments {
   showTax?: boolean;
   showDiscount?: boolean;
   charges?: ChargeInput[];
+  letter?: LetterSettings;
 }
 
 export type EscalationDecision = 'APPROVED' | 'RETURNED';
@@ -109,6 +113,10 @@ export interface Backend {
   addQuotationFollowUp(actor: UserProfile, id: string, input: FollowUpInput): Promise<void>;
 
   addUser(actor: UserProfile, input: NewUserInput): Promise<Result>;
+  /** Management: a Sales person's letter code and, optionally, the last number already used this year. */
+  setQuoteCode(actor: UserProfile, userId: string, code: string, lastNo?: number): Promise<void>;
+  /** Management: last letter number used this year, per code. */
+  quoteCounters(actor: UserProfile): Promise<Record<string, number>>;
   updateUser(actor: UserProfile, id: string, patch: UserPatch): Promise<Result>;
 
   /** Products on agusta.co.id matching a sales request (via the server proxy). */

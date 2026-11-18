@@ -36,7 +36,7 @@ export function ChargesEditor({
         {charges.map((c, i) => (
           <li key={i} className="flex justify-between gap-3">
             <span className="text-ink-2">{c.label || CHARGE_KIND_LABEL[c.kind]}</span>
-            <span className="tabular-nums">{formatRupiah(c.amount)}</span>
+            <span className="tabular-nums">{c.amount > 0 ? formatRupiah(c.amount) : 'Termasuk'}</span>
           </li>
         ))}
       </ul>
@@ -78,12 +78,34 @@ export function ChargesEditor({
           <button
             type="button"
             onClick={() => onChange(charges.filter((_, idx) => idx !== i))}
-            className="row-span-2 self-start rounded p-1 text-ink-3 hover:bg-brand-soft hover:text-brand-strong cursor-pointer"
+            className="row-span-3 self-start rounded p-1 text-ink-3 hover:bg-brand-soft hover:text-brand-strong cursor-pointer"
             aria-label="Hapus biaya"
           >
             <X className="size-4" />
           </button>
-          <RupiahInput label={`Jumlah ${c.label || CHARGE_KIND_LABEL[c.kind]}`} value={c.amount} onChange={amount => set(i, { amount })} className="w-full" />
+          <input
+            aria-label={`Rincian ${c.label || CHARGE_KIND_LABEL[c.kind]}`}
+            value={c.description ?? ''}
+            placeholder="Rincian (opsional), mis. Videotron, panel, dan perapian kabel"
+            onChange={e => set(i, { description: e.target.value })}
+            className="h-8 min-w-0 rounded-md border border-line-strong bg-surface px-2 text-xs focus:border-link focus:outline-none"
+          />
+          <div className="flex items-center gap-3">
+            {c.included ? (
+              <span className="flex h-9 flex-1 items-center rounded-md bg-canvas px-2.5 text-xs font-medium text-ink-2">Dicetak "Termasuk"</span>
+            ) : (
+              <RupiahInput label={`Jumlah ${c.label || CHARGE_KIND_LABEL[c.kind]}`} value={c.amount} onChange={amount => set(i, { amount })} className="min-w-0 flex-1" />
+            )}
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-ink-2">
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--color-link)]"
+                checked={!!c.included}
+                onChange={e => set(i, { included: e.target.checked, amount: e.target.checked ? 0 : c.amount })}
+              />
+              Termasuk
+            </label>
+          </div>
         </div>
       ))}
       <button
@@ -91,12 +113,23 @@ export function ChargesEditor({
         onClick={() => onChange([...charges, { kind: 'INSTALL', label: CHARGE_KIND_LABEL.INSTALL, amount: 0 }])}
         className="inline-flex items-center gap-1 self-start text-xs font-medium text-link hover:text-link-strong cursor-pointer"
       >
-        <Plus className="size-3.5" /> Tambah biaya (jasa pasang, ongkir, …)
+        <Plus className="size-3.5" /> Tambah jasa/biaya (pasang, kirim, testing, …)
       </button>
     </div>
   );
 }
 
-/** Rows worth saving: a label and a positive amount. */
-export const cleanCharges = (charges: ChargeInput[]) =>
-  charges.filter(c => c.amount > 0 && c.label.trim()).map(c => ({ ...c, label: c.label.trim() }));
+/** Rows worth saving: a label and a positive amount, or marked "Termasuk" (0). */
+export const cleanCharges = (charges: ChargeInput[]): ChargeInput[] =>
+  charges
+    .filter(c => c.label.trim() && (c.amount > 0 || c.included))
+    .map(c => ({
+      kind: c.kind,
+      label: c.label.trim(),
+      amount: c.included ? 0 : c.amount,
+      ...(c.description?.trim() ? { description: c.description.trim() } : {}),
+    }));
+
+/** Saved charges into editor rows (0 = Termasuk). */
+export const chargeRows = (charges: { kind: ChargeInput['kind']; label: string; amount: number; description?: string }[] | undefined): ChargeInput[] =>
+  (charges ?? []).map(c => ({ kind: c.kind, label: c.label, amount: c.amount, description: c.description, included: c.amount === 0 }));
