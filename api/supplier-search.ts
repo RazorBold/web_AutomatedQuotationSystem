@@ -38,7 +38,8 @@ export const GET = handle(async request => {
     res = await fetch(`${process.env.SERPER_BASE_URL || 'https://google.serper.dev'}/search`, {
       method: 'POST',
       headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: googleQuery, gl: 'id', hl: 'id', location: 'Indonesia', num: 20 }),
+      // num ≤ 10: free Serper accounts reject site: queries asking for more ("Query pattern not allowed").
+      body: JSON.stringify({ q: googleQuery, gl: 'id', hl: 'id', location: 'Indonesia', num: 10 }),
       signal: AbortSignal.timeout(20_000),
     });
   } catch {
@@ -46,7 +47,10 @@ export const GET = handle(async request => {
   }
   if (res.status === 401 || res.status === 403) throw new HttpError(502, 'API key Serper.dev ditolak. Periksa SERPER_API_KEY.');
   if (res.status === 429) throw new HttpError(429, 'Kuota pencarian Serper.dev habis atau terlalu sering. Coba lagi nanti.');
-  if (!res.ok) throw new HttpError(502, `Layanan pencarian mengembalikan status ${res.status}.`);
+  if (!res.ok) {
+    const detail = ((await res.json().catch(() => ({}))) as { message?: string }).message;
+    throw new HttpError(502, `Layanan pencarian mengembalikan status ${res.status}${detail ? `: ${detail}` : ''}.`);
+  }
 
   const body = (await res.json().catch(() => ({}))) as { organic?: unknown[] };
   const sites = domains.map(d => ({ id: d, name: d, domain: d }));
