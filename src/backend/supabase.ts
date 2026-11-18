@@ -238,6 +238,21 @@ function check<T extends { error: { message: string } | null }>(res: T): T {
   return res;
 }
 
+/**
+ * Every row of a query. PostgREST returns at most 1000 rows per request (Supabase default), and the
+ * catalog alone is over 2000 products, so read it in pages. The query must have a stable order.
+ */
+const PAGE_ROWS = 1000;
+async function allRows(page: (from: number, to: number) => PromiseLike<{ data: Row[] | null; error: { message: string } | null }>) {
+  const rows: Row[] = [];
+  for (let from = 0; ; from += PAGE_ROWS) {
+    const res = await page(from, from + PAGE_ROWS - 1);
+    if (res.error) return { data: null, error: res.error };
+    rows.push(...(res.data ?? []));
+    if ((res.data ?? []).length < PAGE_ROWS) return { data: rows, error: null };
+  }
+}
+
 const pricingPayload = (items: QuotationItemData[]) =>
   items.map(i => ({ id: i.id, cogs: i.cogs, sellingPrice: i.sellingPrice, discountPercent: i.discountPercent }));
 
@@ -339,6 +354,10 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       return data as { inserted: number; updated: number };
     },
 
+    async importAirtableProducts(_actor, items) {
+      const { data } = check(await sb.rpc('import_airtable_products', { p_items: items }));
+      return data as { inserted: number; updated: number };
+    },
     async markNotificationsRead(_actor, ids) {
       check(await sb.rpc('mark_notifications_read', { p_ids: ids ?? null }));
     },
@@ -346,8 +365,15 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
     async load(userId) {
       const [users, products, quotations, requests, rules, notifications, sites, history] = await Promise.all([
         sb.from('profiles').select('*').order('created_at'),
-        sb.from('products').select('*, product_costs(cogs)').order('created_at'),
-        sb.from('quotations').select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs)), quotation_charges(*), quotation_followups(*)').order('created_at', { ascending: false }),
+        allRows((from, to) => sb.from('products').select('*, product_costs(cogs)').order('created_at').order('id').range(from, to)),
+        allRows((from, to) =>
+          sb
+            .from('quotations')
+            .select('*, quotation_costs(*), quotation_items(*, quotation_item_costs(cogs)), quotation_charges(*), quotation_followups(*)')
+            .order('created_at', { ascending: false })
+            .order('id')
+            .range(from, to)
+        ),
         sb.from('custom_requests').select('*, custom_request_costs(assigned_cogs, supplier_name, supplier_url, supplier_price)').order('submitted_at', { ascending: false }),
         sb.from('discount_rules').select('*').order('position'),
         sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),

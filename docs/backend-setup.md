@@ -23,6 +23,7 @@ WhatsApp berjalan **mode simulasi** sampai `WHATSAPP_ACCESS_TOKEN` dan `WHATSAPP
    6. `supabase/migrations/20261118000000_tahap2_workflow.sql`: pagu/anggaran barang custom, aturan diskon per merek, biaya tambahan, eskalasi ke Management, revisi penawaran (-R1, -R2).
    7. `supabase/migrations/20261119000000_tahap3_followup.sql`: update perkembangan penawaran oleh Sales (status, nilai PO, alasan kalah) dan fungsi pengingat mingguan.
    8. `supabase/migrations/20261120000000_tahap4_supplier.sql`: daftar website supplier, import price list ke HPP, dan riwayat perubahan HPP (hanya terlihat oleh Sales Support & Management).
+   9. `supabase/migrations/20261121000000_airtable_catalog.sql`: sinkronisasi katalog dari Airtable (harga jual dari Airtable) dan bucket publik `product-images` untuk foto produk. Isi `AIRTABLE_TOKEN`, `AIRTABLE_BASE_ID`, dan `AIRTABLE_PRODUCTS_TABLE` (lihat `.env.example`), lalu jalankan **Katalog produk → Sinkronkan dari Airtable**.
 3. Buka **Project Settings → API**, lalu salin tiga nilai berikut ke `.env.local` (lihat `.env.example`):
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` → `VITE_SUPABASE_ANON_KEY`

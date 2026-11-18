@@ -10,6 +10,7 @@ import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
 import type { Backend, ChargeInput, QuotationAdjustments, Snapshot } from './types';
 import { agustaApi, productFromAgusta, sameProduct } from './agustaApi';
+import { productFromAirtable } from '../utils/airtableCatalog';
 import { MAX_SITES, normalizeDomain, type SupplierSite } from '../utils/supplierSearch';
 
 const STORAGE_KEY = 'agusta-qs:v3';
@@ -292,6 +293,41 @@ export function createLocalBackend(): Backend {
           updated++;
         } else {
           if (skus.has(fresh.sku.toUpperCase())) fresh.sku = `${fresh.sku}-${a.sourceId}`;
+          skus.add(fresh.sku.toUpperCase());
+          products.push(fresh);
+          inserted++;
+        }
+      }
+      state = { ...state, products };
+      save();
+      return { inserted, updated };
+    },
+
+    async importAirtableProducts(actor, items) {
+      require(actor, 'cogs:edit');
+      let inserted = 0;
+      let updated = 0;
+      const products = [...state.products];
+      const skus = new Set(products.map(p => p.sku.toUpperCase()));
+      for (const a of items) {
+        const fresh = productFromAirtable(a);
+        const i = products.findIndex(p => p.sourceId === a.sourceId);
+        if (i >= 0) {
+          const cur = products[i]!;
+          // Airtable owns these; the portal keeps HPP, stock and its own flags.
+          products[i] = {
+            ...cur,
+            name: fresh.name,
+            brand: fresh.brand || cur.brand,
+            category: fresh.category,
+            basePrice: fresh.basePrice > 0 ? fresh.basePrice : cur.basePrice,
+            specs: fresh.specs,
+            dimensions: fresh.dimensions,
+            image: fresh.image || cur.image,
+          };
+          updated++;
+        } else {
+          if (skus.has(fresh.sku.toUpperCase())) fresh.sku = `${fresh.sku.slice(0, 45)}-${a.sourceId.slice(-6).toUpperCase()}`;
           skus.add(fresh.sku.toUpperCase());
           products.push(fresh);
           inserted++;

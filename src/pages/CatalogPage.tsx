@@ -11,9 +11,12 @@ import { NewRequestDrawer } from './CustomRequestsPage';
 
 const PAGE_SIZE = 60;
 
-/** Pulls the agusta.co.id catalog into the portal, one website page at a time, with progress and cancel. */
-function SyncDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { syncAgustaCatalog, notify } = useStore();
+type SyncSource = 'airtable' | 'agusta';
+
+/** Pulls a catalog into the portal page by page (Airtable, or the agusta.co.id website), with progress and cancel. */
+function SyncDialog({ source, onClose }: { source: SyncSource | null; onClose: () => void }) {
+  const { syncAgustaCatalog, syncAirtableCatalog, notify } = useStore();
+  const airtable = source === 'airtable';
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [error, setError] = useState('');
@@ -25,7 +28,7 @@ function SyncDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
     setError('');
     setProgress(null);
     try {
-      const p = await syncAgustaCatalog(setProgress, abort.current.signal);
+      const p = await (airtable ? syncAirtableCatalog : syncAgustaCatalog)(setProgress, abort.current.signal);
       setState('done');
       notify(`Sinkronisasi selesai: ${p.inserted} produk baru, ${p.updated} diperbarui.`);
     } catch (e) {
@@ -40,13 +43,14 @@ function SyncDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
     onClose();
   };
 
-  const pct = progress ? Math.round((progress.page / Math.max(1, progress.lastPage)) * 100) : 0;
+  // Airtable has no total up front, so its bar only fills when the last page is in.
+  const pct = !progress ? 0 : airtable ? (state === 'done' ? 100 : 0) : Math.round((progress.page / Math.max(1, progress.lastPage)) * 100);
 
   return (
     <Dialog
-      open={open}
+      open={source !== null}
       onClose={close}
-      title="Sinkronkan katalog dari agusta.co.id"
+      title={airtable ? 'Sinkronkan katalog dari Airtable' : 'Sinkronkan katalog dari agusta.co.id'}
       width="max-w-lg"
       footer={
         state === 'running' ? (
@@ -65,35 +69,53 @@ function SyncDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         )
       }
     >
-      <p className="text-[13px] leading-relaxed text-ink-2">
-        Mengambil semua produk dari website Agusta: nama, SKU, foto, kategori, spesifikasi, dan link halaman produk.
-      </p>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-[13px] text-ink-2">
-        <li>Website tidak mencantumkan harga. Produk baru masuk dengan tanda <span className="font-semibold text-ink">Perlu harga</span> dan belum bisa dipakai di penawaran sampai harganya diisi.</li>
-        <li>Harga, HPP, stok, dan nama produk yang sudah ada di portal tidak diubah.</li>
-      </ul>
+      {airtable ? (
+        <>
+          <p className="text-[13px] leading-relaxed text-ink-2">
+            Mengambil semua produk dari tabel katalog Agusta di Airtable: nama, kode, merek, kategori, harga jual, spesifikasi, ukuran, dan foto.
+          </p>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-[13px] text-ink-2">
+            <li>Airtable menjadi acuan harga jual. Produk yang sudah pernah disinkronkan ikut diperbarui, termasuk harganya.</li>
+            <li>HPP dan stok tidak ada di Airtable, jadi tetap memakai data di portal. Isi HPP lewat menu <span className="font-semibold text-ink">Supplier &amp; HPP</span>.</li>
+            <li>Produk tanpa harga di Airtable masuk dengan tanda <span className="font-semibold text-ink">Perlu harga</span>.</li>
+          </ul>
+        </>
+      ) : (
+        <>
+          <p className="text-[13px] leading-relaxed text-ink-2">
+            Mengambil semua produk dari website Agusta: nama, SKU, foto, kategori, spesifikasi, dan link halaman produk.
+          </p>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-[13px] text-ink-2">
+            <li>Website tidak mencantumkan harga. Produk baru masuk dengan tanda <span className="font-semibold text-ink">Perlu harga</span> dan belum bisa dipakai di penawaran sampai harganya diisi.</li>
+            <li>Harga, HPP, stok, dan nama produk yang sudah ada di portal tidak diubah.</li>
+          </ul>
+        </>
+      )}
 
       {(state === 'running' || state === 'done' || (state === 'error' && progress)) && progress && (
         <div className="mt-5" role="status" aria-live="polite">
           <div className="flex justify-between text-xs text-ink-2">
-            <span>
-              Halaman {progress.page} dari {progress.lastPage}
+            <span className="flex items-center gap-1.5">
+              {airtable && state === 'running' && <Loader2 className="size-3.5 animate-spin" />}
+              {airtable ? `${progress.total.toLocaleString('id-ID')} produk dibaca` : `Halaman ${progress.page} dari ${progress.lastPage}`}
             </span>
-            <span className="tabular-nums">{pct}%</span>
+            {(!airtable || state === 'done') && <span className="tabular-nums">{pct}%</span>}
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-canvas">
-            <div className="h-full rounded-full bg-link transition-[width] duration-200" style={{ width: `${pct}%` }} />
-          </div>
+          {(!airtable || state === 'done') && (
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-canvas">
+              <div className="h-full rounded-full bg-link transition-[width] duration-200" style={{ width: `${pct}%` }} />
+            </div>
+          )}
           <p className="mt-2 text-[13px] text-ink">
             <span className="font-semibold tabular-nums">{progress.inserted}</span> produk baru ·{' '}
             <span className="font-semibold tabular-nums">{progress.updated}</span> diperbarui
-            {progress.total > 0 && <span className="text-ink-3"> · {progress.total.toLocaleString('id-ID')} produk di website</span>}
+            {!airtable && progress.total > 0 && <span className="text-ink-3"> · {progress.total.toLocaleString('id-ID')} produk di website</span>}
           </p>
         </div>
       )}
       {state === 'running' && !progress && (
         <p className="mt-5 flex items-center gap-2 text-[13px] text-ink-2" role="status">
-          <Loader2 className="size-4 animate-spin" /> Menghubungi agusta.co.id…
+          <Loader2 className="size-4 animate-spin" /> {airtable ? 'Menghubungi Airtable dan menyalin foto…' : 'Menghubungi agusta.co.id…'}
         </p>
       )}
       {state === 'error' && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-800">{error}</p>}
@@ -282,7 +304,7 @@ export function CatalogPage({ navigate }: { navigate: (r: Route) => void }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [needsPrice, setNeedsPrice] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncSource, setSyncSource] = useState<SyncSource | null>(null);
   const canSync = can(currentUser, 'cogs:edit');
 
   const categories = useMemo(() => {
@@ -352,9 +374,14 @@ export function CatalogPage({ navigate }: { navigate: (r: Route) => void }) {
         }
         actions={
           canSync && (
-            <Button icon={<RefreshCw className="size-4" />} onClick={() => setSyncOpen(true)}>
-              Sinkronkan dari agusta.co.id
-            </Button>
+            <>
+              <Button variant="ghost" icon={<RefreshCw className="size-4" />} onClick={() => setSyncSource('agusta')}>
+                Dari agusta.co.id
+              </Button>
+              <Button icon={<RefreshCw className="size-4" />} onClick={() => setSyncSource('airtable')}>
+                Sinkronkan dari Airtable
+              </Button>
+            </>
           )
         }
       />
@@ -500,7 +527,7 @@ export function CatalogPage({ navigate }: { navigate: (r: Route) => void }) {
         {filterList}
       </Drawer>
       <ProductDrawer product={products.find(p => p.id === openId) ?? null} onClose={() => setOpenId(null)} navigate={navigate} />
-      {canSync && <SyncDialog open={syncOpen} onClose={() => setSyncOpen(false)} />}
+      {canSync && <SyncDialog source={syncSource} onClose={() => setSyncSource(null)} />}
     </div>
   );
 }

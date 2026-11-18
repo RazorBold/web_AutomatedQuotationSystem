@@ -1,5 +1,6 @@
 import type { Product } from '../types';
 import { agustaImageUrl, brandFromSpecs, type AgustaProduct } from '../utils/agustaCatalog';
+import type { AirtablePage } from '../utils/airtableCatalog';
 import type { MarketSearchResult } from '../utils/marketResearch';
 import type { SupplierSearchResult } from '../utils/supplierSearch';
 
@@ -20,6 +21,8 @@ export function agustaApi(token: TokenGetter = async () => null) {
       (await getJson<{ products: AgustaProduct[] }>(`/api/agusta-search?q=${encodeURIComponent(query)}`, token)).products,
     fetchAgustaPage: (page: number) =>
       getJson<{ products: AgustaProduct[]; page: number; lastPage: number; total: number }>(`/api/agusta-search?page=${page}`, token),
+    fetchAirtablePage: (offset?: string) =>
+      getJson<AirtablePage>(`/api/airtable-catalog${offset ? `?offset=${encodeURIComponent(offset)}` : ''}`, token),
     searchMarket: (query: string) => getJson<MarketSearchResult>(`/api/market-search?q=${encodeURIComponent(query)}`, token),
     searchSuppliers: (query: string, domains: string[]) =>
       getJson<SupplierSearchResult>(

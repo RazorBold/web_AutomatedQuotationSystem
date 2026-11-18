@@ -3,6 +3,7 @@ import type { SupplierSearchResult, SupplierSite } from '../utils/supplierSearch
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
+import type { AirtablePage, AirtableProduct } from '../utils/airtableCatalog';
 import type { MarketSearchResult, SupplierRef } from '../utils/marketResearch';
 
 export type Result = { ok: true } | { ok: false; error: string };
@@ -116,6 +117,10 @@ export interface Backend {
   fetchAgustaPage(page: number): Promise<{ products: AgustaProduct[]; page: number; lastPage: number; total: number }>;
   /** Upserts website products into the catalog (new ones have no price yet). */
   importAgustaProducts(actor: UserProfile, items: AgustaProduct[]): Promise<{ inserted: number; updated: number }>;
+  /** One page (100 products) of Agusta's Airtable catalog; `offset` continues from the previous page. */
+  fetchAirtablePage(offset?: string): Promise<AirtablePage>;
+  /** Upserts Airtable products into the catalog (Airtable owns name, brand, category, price, specs, photo). */
+  importAirtableProducts(actor: UserProfile, items: AirtableProduct[]): Promise<{ inserted: number; updated: number }>;
 
   /** Comparable offers on the web for a custom request (Sales Support). */
   searchMarket(query: string): Promise<MarketSearchResult>;

@@ -79,6 +79,8 @@ interface Store {
   setCustomRequestSupplier: (id: string, supplier: SupplierRef | null) => Promise<void>;
   /** Imports the whole agusta.co.id catalog, one page at a time. */
   syncAgustaCatalog: (onProgress: (p: SyncProgress) => void, signal: AbortSignal) => Promise<SyncProgress>;
+  /** Pulls Agusta's Airtable catalog (with prices); `total` counts products read so far. */
+  syncAirtableCatalog: (onProgress: (p: SyncProgress) => void, signal: AbortSignal) => Promise<SyncProgress>;
   toasts: Toast[];
 
   login: (email: string, password: string) => Promise<Result>;
@@ -388,6 +390,29 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     return progress;
   };
 
+  const syncAirtableCatalog: Store['syncAirtableCatalog'] = async (onProgress, signal) => {
+    // Airtable gives no total up front: `page` counts pages done, `lastPage` stays one ahead until the end.
+    const progress: SyncProgress = { page: 0, lastPage: 1, total: 0, inserted: 0, updated: 0 };
+    try {
+      let offset: string | undefined;
+      do {
+        if (signal.aborted) break;
+        const res = await backend.fetchAirtablePage(offset);
+        const r = await backend.importAirtableProducts(actor(), res.products);
+        offset = res.offset;
+        progress.page += 1;
+        progress.lastPage = offset ? progress.page + 1 : progress.page;
+        progress.total += res.products.length;
+        progress.inserted += r.inserted;
+        progress.updated += r.updated;
+        onProgress({ ...progress });
+      } while (offset);
+    } finally {
+      await refresh().catch(() => undefined);
+    }
+    return progress;
+  };
+
   const resetDemoData = backend.resetDemoData
     ? async () => {
         await backend.resetDemoData!();
@@ -411,6 +436,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     applyPriceList,
     setCustomRequestSupplier,
     syncAgustaCatalog,
+    syncAirtableCatalog,
     toasts,
     login,
     logout,
