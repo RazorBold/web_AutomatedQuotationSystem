@@ -7,7 +7,7 @@ import type { AppNotification, FollowUp, LetterSettings, NotificationType, Price
 import { FOLLOWUP_INTERVAL_DAYS, needsFollowUp } from '../utils/analytics';
 import { can, type Permission } from '../auth/permissions';
 import { calculateLineSubtotal, calculateQuotationTotals, DEFAULT_DISCOUNT_RULES, formatRupiah, normalizeBrand } from '../utils/quotationEngine';
-import { agustaNumber } from '../utils/letter';
+import { DEFAULT_SETTINGS, agustaNumber } from '../utils/letter';
 import { normalizeWhatsAppNumber } from '../utils/whatsapp';
 import type { Backend, ChargeInput, QuotationAdjustments, Snapshot } from './types';
 import { agustaApi, productFromAgusta, sameProduct } from './agustaApi';
@@ -77,6 +77,7 @@ const initialState = (): State => ({
   notifications: [],
   supplierSites: [],
   priceHistory: [],
+  settings: DEFAULT_SETTINGS,
   sessionUserId: null,
 });
 
@@ -99,6 +100,7 @@ function read(): State {
       priceHistory: p.priceHistory ?? [],
       sessionUserId: p.sessionUserId ?? null,
       quoteCounters: p.quoteCounters ?? {},
+      settings: p.settings ?? DEFAULT_SETTINGS,
     };
   } catch {
     return base;
@@ -124,7 +126,7 @@ export function createLocalBackend(): Backend {
     c ? c.filter(x => x.amount >= 0 && x.label.trim()).map((x, i) => ({ ...x, label: x.label.trim(), id: `chg-${Date.now()}-${i}` })) : fallback;
   const withLetter = (q: Quotation, l?: LetterSettings): Quotation =>
     l
-      ? { ...q, taxMode: l.taxMode, discountMode: l.discountMode, showTax: l.taxMode !== 'EXCLUDED', showDiscount: l.discountMode !== 'HIDDEN', terms: l.terms, paymentTerms: l.paymentTerms.length ? l.paymentTerms : undefined }
+      ? { ...q, taxMode: l.taxMode, discountMode: l.discountMode, showTax: l.taxMode !== 'EXCLUDED', showDiscount: l.discountMode !== 'HIDDEN', terms: l.terms, paymentTerms: l.paymentTerms.length ? l.paymentTerms : undefined, ...(l.bank !== undefined ? { bankAccount: l.bank ?? undefined } : {}) }
       : q;
   const applyAdj = (q: Quotation, a?: QuotationAdjustments): Quotation => {
     if (!a) return q;
@@ -754,6 +756,12 @@ export function createLocalBackend(): Backend {
         products: state.products.map(p => (p.id === id ? { ...p, ...clean } : p)),
         priceHistory: [...logged, ...state.priceHistory].slice(0, 500),
       };
+      save();
+    },
+
+    async saveSetting(actor, key, value) {
+      require(actor, 'discount-rules:edit');
+      state = { ...state, settings: { ...state.settings, [key]: value } };
       save();
     },
 

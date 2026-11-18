@@ -1,7 +1,8 @@
 import React, { useId, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { DiscountMode, LetterSettings, PaymentTerm, TaxMode } from '../types';
-import { PAYMENT_PRESETS, TERM_SUGGESTIONS } from '../utils/letter';
+import { defaultBank } from '../utils/letter';
+import { useStore } from '../store/AppStore';
 import { cx } from './ui';
 
 const TAX_OPTIONS: { value: TaxMode; label: string; hint: string }[] = [
@@ -41,6 +42,14 @@ export const cleanLetter = (l: LetterSettings): LetterSettings => ({
  */
 export function LetterEditor({ value, onChange }: { value: LetterSettings; onChange: (v: LetterSettings) => void }) {
   const id = useId();
+  const { settings } = useStore();
+  const TERM_SUGGESTIONS = settings.templates.suggestions;
+  const PAYMENT_PRESETS = settings.templates.paymentPresets;
+  const banks = settings.banks;
+  const fallbackBank = defaultBank(banks);
+  // A copy on the letter that is no longer in the list still shows (and stays selectable).
+  const bankOptions = value.bank && !banks.some(b => b.id === value.bank!.id) ? [...banks, value.bank] : banks;
+  const bankId = value.bank?.id ?? '';
   const [custom, setCustom] = useState('');
   const set = (p: Partial<LetterSettings>) => onChange({ ...value, ...p });
   const setTerm = (i: number, text: string) => set({ terms: value.terms.map((t, idx) => (idx === i ? text : t)) });
@@ -157,7 +166,7 @@ export function LetterEditor({ value, onChange }: { value: LetterSettings; onCha
             ))}
           </div>
         )}
-        <p className="mt-2 text-xs text-ink-3">Pernyataan PPN dan rekening BCA Agusta selalu dicetak otomatis.</p>
+        <p className="mt-2 text-xs text-ink-3">Pernyataan PPN dan rekening pembayaran selalu dicetak otomatis.</p>
       </div>
 
       <div>
@@ -217,6 +226,24 @@ export function LetterEditor({ value, onChange }: { value: LetterSettings; onCha
             <Plus className="size-3.5" /> Baris termin
           </button>
         </div>
+      </div>
+
+      <div>
+        <p className="font-semibold text-ink">Rekening pembayaran</p>
+        <select
+          aria-label="Rekening pembayaran"
+          value={bankId}
+          onChange={e => set({ bank: e.target.value ? bankOptions.find(b => b.id === e.target.value) ?? null : null })}
+          className="mt-2 h-9 w-full cursor-pointer rounded-md border border-line-strong bg-surface px-2 text-[12.5px] focus:border-link focus:outline-none"
+        >
+          <option value="">Default · {fallbackBank.bank} {fallbackBank.account}</option>
+          {bankOptions.map(b => (
+            <option key={b.id} value={b.id}>
+              {b.bank} · {b.account}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-ink-3">Daftar rekening diatur di menu Pengaturan.</p>
       </div>
     </div>
   );

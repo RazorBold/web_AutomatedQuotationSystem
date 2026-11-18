@@ -5,7 +5,7 @@ import { formatRupiah, formatWhatsAppQuotationMessage } from '../utils/quotation
 import { buildWhatsAppTemplatePayload } from '../utils/whatsapp';
 import { Signer, downloadQuotationPdf, isIssued, signerFor } from '../utils/quotationPdf';
 import { customerAddress, documentView } from '../utils/quotationView';
-import { COMPANY, letterDate, letterNumber, letterSubject, quotationFileName } from '../utils/letter';
+import { letterDate, letterNumber, letterSubject, quotationFileName } from '../utils/letter';
 import { AgustaLogo } from './AgustaLogo';
 import { Button, Dialog, IconButton, ProductImage } from './ui';
 import { errorMessage, useStore } from '../store/AppStore';
@@ -43,8 +43,10 @@ const CELL = 'border border-ink/70 px-2 py-1.5';
 /** The official quotation letter in Agusta's format, rendered as an A4 sheet. Never shows COGS or margin. */
 export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
   const signer = useSigner(q);
+  const { settings } = useStore();
   const issued = isIssued(q);
-  const view = documentView(q);
+  const view = documentView(q, settings);
+  const COMPANY = view.company;
   const address = customerAddress(q);
   const cols = view.showDiscount ? 6 : 5;
   return (
@@ -183,12 +185,12 @@ export function QuotationSheet({ quotation: q }: { quotation: Quotation }) {
           <li>
             Pembayaran dapat ditransfer ke rekening perusahaan
             <div className="mt-0.5 pl-12">
-              <p className="font-bold">{COMPANY.bank.name}</p>
+              <p className="font-bold">{view.bank.bank}</p>
               <p>
-                an. <span className="font-bold">{COMPANY.bank.holder}</span>
+                an. <span className="font-bold">{view.bank.holder}</span>
               </p>
               <p>
-                rek. <span className="font-bold">{COMPANY.bank.account}</span>
+                rek. <span className="font-bold">{view.bank.account}</span>
               </p>
             </div>
           </li>
@@ -219,6 +221,7 @@ export function PdfDialog({
   onSendWhatsApp?: (q: Quotation) => void;
 }) {
   const signer = useSigner(quotation);
+  const { settings } = useStore();
   if (!quotation) return null;
   return (
     <Dialog open={open} onClose={onClose} title={`Dokumen ${quotation.quotationNumber}`} width="max-w-[880px]" bare>
@@ -236,7 +239,7 @@ export function PdfDialog({
               WhatsApp
             </Button>
           )}
-          <Button size="sm" variant="primary" icon={<Download className="size-4" />} onClick={() => downloadQuotationPdf(quotation, signer)}>
+          <Button size="sm" variant="primary" icon={<Download className="size-4" />} onClick={() => downloadQuotationPdf(quotation, signer, settings)}>
             Unduh PDF
           </Button>
           <IconButton label="Tutup" onClick={onClose}>

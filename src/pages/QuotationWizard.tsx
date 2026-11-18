@@ -4,7 +4,7 @@ import { errorMessage, useStore, useVisibleProducts } from '../store/AppStore';
 import { SmartSuggestions } from '../components/SmartSuggestions';
 import { DiscountInput, RupiahInput } from '../components/DiscountInput';
 import { ChargesEditor, chargeRows, chargesTotal, cleanCharges } from '../components/ChargesEditor';
-import { DEFAULT_LETTER, letterSettingsOf } from '../utils/letter';
+import { defaultLetter, letterSettingsOf } from '../utils/letter';
 import type { ChargeInput } from '../backend';
 import { CATEGORIES, NewRequestDrawer, type CustomRequestDraft } from './CustomRequestsPage';
 import { AgustaWebResults } from '../components/AgustaWebResults';
@@ -57,7 +57,7 @@ export function QuotationWizard({
   initialProductId?: string;
   navigate: (r: Route) => void;
 }) {
-  const { quotations, createQuotation, notify, currentUser, discountRules } = useStore();
+  const { quotations, createQuotation, notify, currentUser, discountRules, settings } = useStore();
   const products = useVisibleProducts();
   const editing = editId ? quotations.find(q => q.id === editId) : undefined;
 

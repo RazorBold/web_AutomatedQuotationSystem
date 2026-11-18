@@ -141,6 +141,7 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
     notify,
     discountRules,
     products,
+    settings,
   } = useStore();
   const [items, setItems] = useState<QuotationItemData[]>(() => q.items.map(i => ({ ...i })));
   const [notes, setNotes] = useState(q.supportNotes ?? '');
@@ -150,7 +151,7 @@ function ReviewWorkspace({ q, navigate, onApproved, mode }: { q: Quotation; navi
   const [acceptLowMargin, setAcceptLowMargin] = useState(false);
   const [busy, setBusy] = useState<'approve' | 'reject' | 'save' | 'escalate' | 'return' | null>(null);
   const initialCharges = chargeRows(q.charges);
-  const initialLetter = letterSettingsOf(q);
+  const initialLetter = letterSettingsOf(q, settings.templates);
   const [adj, setAdj] = useState<{ extraDiscount: number; letter: LetterSettings; charges: ChargeInput[] }>({
     extraDiscount: q.extraDiscount ?? 0,
     letter: initialLetter,

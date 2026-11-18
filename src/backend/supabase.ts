@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   AppNotification,
+  AppSettings,
   CustomProductRequest,
   CustomerInfo,
   Escalation,
@@ -21,7 +22,7 @@ import type { CustomerCategory, DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { Backend, QuotationAdjustments, Result } from './types';
 import { agustaApi } from './agustaApi';
-import { quotationFileName, storageFileName } from '../utils/letter';
+import { DEFAULT_SETTINGS, quotationFileName, storageFileName } from '../utils/letter';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -107,6 +108,16 @@ function mapItem(r: Row): QuotationItemData {
   };
 }
 
+/** app_settings rows → settings, falling back to the defaults for anything missing. */
+function mapSettings(rows: Row[]): AppSettings {
+  const by = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  return {
+    company: { ...DEFAULT_SETTINGS.company, ...(by.company ?? {}) },
+    banks: Array.isArray(by.banks) && by.banks.length ? by.banks : DEFAULT_SETTINGS.banks,
+    templates: { ...DEFAULT_SETTINGS.templates, ...(by.letter_templates ?? {}) },
+  };
+}
+
 function mapQuotation(r: Row): Quotation {
   const costs = one(r.quotation_costs as Row | Row[]);
   const items = ((r.quotation_items ?? []) as Row[]).sort((a, b) => a.position - b.position).map(mapItem);
@@ -143,6 +154,7 @@ function mapQuotation(r: Row): Quotation {
     terms: Array.isArray(r.letter_terms) ? r.letter_terms : undefined,
     paymentTerms: Array.isArray(r.payment_terms) ? r.payment_terms.map((p: Row) => ({ label: String(p.label), percent: Number(p.percent) })) : undefined,
     issuedOn: r.issued_on ?? undefined,
+    bankAccount: r.bank_account ?? undefined,
     charges: ((r.quotation_charges ?? []) as Row[])
       .sort((a, b) => a.position - b.position)
       .map(c => ({ id: c.id, kind: c.kind, label: c.label, amount: n(c.amount), description: c.description || undefined })),
@@ -282,6 +294,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
         p_payment_terms: l.paymentTerms,
       })
     );
+    if (l.bank !== undefined) check(await sb.rpc('set_quotation_bank', { p_id: id, p_bank: l.bank ? { id: l.bank.id, bank: l.bank.bank, holder: l.bank.holder, account: l.bank.account } : null }));
   }
 
   async function applyAdjustments(id: string, a: QuotationAdjustments | undefined) {
@@ -362,6 +375,9 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
       );
     },
 
+    async saveSetting(_actor, key, value) {
+      check(await sb.rpc('set_app_setting', { p_key: key === 'templates' ? 'letter_templates' : key, p_value: value }));
+    },
     async saveSupplierSites(_actor, sites) {
       check(await sb.rpc('replace_supplier_sites', { p_sites: sites.map(s => ({ name: s.name, domain: s.domain })) }));
     },
@@ -385,7 +401,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
     },
 
     async load(userId) {
-      const [users, products, quotations, requests, rules, notifications, sites, history] = await Promise.all([
+      const [users, products, quotations, requests, rules, notifications, sites, history, appSettings] = await Promise.all([
         sb.from('profiles').select('*').order('created_at'),
         allRows((from, to) => sb.from('products').select('*, product_costs(cogs)').order('created_at').order('id').range(from, to)),
         allRows((from, to) =>
@@ -402,6 +418,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
         // RLS returns no rows to Sales for these two.
         sb.from('supplier_sites').select('*').order('position'),
         sb.from('product_price_history').select('*, products(name, sku)').order('created_at', { ascending: false }).limit(200),
+        sb.from('app_settings').select('key, value'),
       ]);
       [users, products, quotations, requests, rules, notifications, sites, history].forEach(check);
       return {
@@ -412,6 +429,7 @@ export function createSupabaseBackend(sb: SupabaseClient): Backend {
         discountRules: (rules.data ?? []).map(mapRule),
         notifications: (notifications.data ?? []).map(mapNotification),
         supplierSites: (sites.data ?? []).map((r: Row) => ({ id: r.id, name: r.name, domain: r.domain })),
+        settings: mapSettings(appSettings.error ? [] : appSettings.data ?? []),
         priceHistory: (history.data ?? []).map(
           (r: Row): PriceChange => ({
             id: r.id,

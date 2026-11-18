@@ -9,7 +9,7 @@ import {
   LogOut,
   Menu,
   MessageSquarePlus,
-  Percent,
+  Settings,
   RotateCcw,
   Users,
   X,
@@ -73,13 +73,15 @@ export function Shell({ route, navigate, children }: { route: Route; navigate: (
       items: [
         { id: 'catalog', label: 'Katalog produk', icon: Boxes, show: h => h('catalog:view') },
         { id: 'suppliers', label: 'Supplier & HPP', icon: Truck, show: h => h('cogs:edit') },
-        { id: 'discount-rules', label: 'Aturan diskon', icon: Percent, show: h => h('discount-rules:edit') },
         { id: 'reports', label: 'Laporan', icon: BarChart3, show: h => h('reports:view') },
       ],
     },
     {
       label: 'Administrasi',
-      items: [{ id: 'users', label: 'User & hak akses', icon: Users, show: h => h('users:manage') }],
+      items: [
+        { id: 'settings', label: 'Pengaturan', icon: Settings, show: h => h('discount-rules:edit') },
+        { id: 'users', label: 'User & hak akses', icon: Users, show: h => h('users:manage') },
+      ],
     },
   ];
 

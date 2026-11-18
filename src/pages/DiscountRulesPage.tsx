@@ -1,15 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { errorMessage, useStore } from '../store/AppStore';
-import { Button, Field, Input, PageHeader, Panel, Select } from '../components/ui';
-import { DEFAULT_DISCOUNT_RULES, DiscountRule, getSuggestedDiscount, normalizeBrand } from '../utils/quotationEngine';
+import { Button, Field, Input, Panel, Select } from '../components/ui';
+import { DiscountRule, getSuggestedDiscount, normalizeBrand } from '../utils/quotationEngine';
 
 const CELL =
   'h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-right text-[13px] tabular-nums focus:border-link focus:outline-none focus:ring-3 focus:ring-link/15';
 const OTHER = 'Semua merek lain';
 
-/** Discount rules per brand (merek) and quantity tier (R12). */
-export function DiscountRulesPage() {
+/** Discount rules per brand (merek) and quantity tier (R12) — a tab of Pengaturan. Agusta fills in its own numbers. */
+export function DiscountRulesEditor() {
   const { discountRules, setDiscountRules, notify, products } = useStore();
   const [draft, setDraft] = useState<DiscountRule[]>(discountRules);
   const [simBrand, setSimBrand] = useState('');
@@ -43,16 +43,14 @@ export function DiscountRulesPage() {
   const simUsesOwn = simBrand !== '' && ruleBrands.includes(normalizeBrand(simBrand));
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Aturan diskon"
-        description="Saran dan batas diskon per merek dan jumlah barang. Muncul otomatis saat Sales menyusun penawaran. Diskon di atas batas maksimum sebaiknya diteruskan ke Management."
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setDraft(DEFAULT_DISCOUNT_RULES)}>
-              Kembalikan default
-            </Button>
+    <>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Panel
+          title="Aturan diskon per merek"
+          description="Saran dan batas diskon per merek dan jumlah barang. Muncul otomatis saat Sales menyusun penawaran. Diskon di atas batas sebaiknya diteruskan ke Management."
+          actions={
             <Button
+              size="sm"
               variant="primary"
               disabled={!dirty || problems.length > 0}
               onClick={() => {
@@ -63,12 +61,9 @@ export function DiscountRulesPage() {
             >
               Simpan aturan
             </Button>
-          </>
-        }
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Panel bodyClassName="overflow-x-auto">
+          }
+          bodyClassName="overflow-x-auto"
+        >
           <datalist id="brand-options">
             {catalogBrands.map(b => (
               <option key={b} value={b} />
@@ -192,6 +187,6 @@ export function DiscountRulesPage() {
           {dirty && <p className="mt-3 text-xs text-amber-700">Memakai perubahan yang belum disimpan.</p>}
         </Panel>
       </div>
-    </div>
+    </>
   );
 }

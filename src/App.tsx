@@ -10,7 +10,7 @@ import { QuotationDetailPage } from './pages/QuotationDetailPage';
 import { QuotationWizard } from './pages/QuotationWizard';
 import { CatalogPage } from './pages/CatalogPage';
 import { CustomRequestsPage } from './pages/CustomRequestsPage';
-import { DiscountRulesPage } from './pages/DiscountRulesPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { ReportsPage } from './pages/ReportsPage';
 // Sales Support / Management only, and it pulls in the price-list parsers: loaded on first visit.
 const SuppliersPage = lazy(() => import('./pages/SuppliersPage').then(m => ({ default: m.SuppliersPage })));
@@ -24,6 +24,7 @@ export type ViewId =
   | 'custom-requests'
   | 'catalog'
   | 'discount-rules'
+  | 'settings'
   | 'reports'
   | 'suppliers'
   | 'users';
@@ -43,6 +44,7 @@ const VIEW_PERMISSION: Partial<Record<ViewId, Permission[]>> = {
   'custom-requests': ['custom-request:create', 'custom-request:price'],
   catalog: ['catalog:view'],
   'discount-rules': ['discount-rules:edit'],
+  settings: ['discount-rules:edit'],
   reports: ['reports:view'],
   suppliers: ['cogs:edit'],
   users: ['users:manage'],
@@ -82,7 +84,8 @@ function Portal() {
       {view === 'quotation-detail' && route.id && <QuotationDetailPage key={route.id} id={route.id} navigate={navigate} />}
       {view === 'custom-requests' && <CustomRequestsPage navigate={navigate} />}
       {view === 'catalog' && <CatalogPage navigate={navigate} />}
-      {view === 'discount-rules' && <DiscountRulesPage />}
+      {view === 'discount-rules' && <SettingsPage key="rules" initialTab="rules" />}
+      {view === 'settings' && <SettingsPage key="settings" />}
       {view === 'reports' && <ReportsPage navigate={navigate} />}
       {view === 'suppliers' && (
         <Suspense fallback={<p className="py-10 text-center text-[13px] text-ink-3">Memuat…</p>}>

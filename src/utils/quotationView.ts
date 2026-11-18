@@ -9,9 +9,9 @@
  * Discount: PERCENT (column in %), AMOUNT (column in rupiah per line), HIDDEN (net unit price).
  * Charges (jasa pasang, ongkir, …) are numbered rows of the table; amount 0 prints "Termasuk".
  */
-import type { DiscountMode, PaymentTerm, Quotation, QuotationItemData, TaxMode } from '../types';
+import type { AppSettings, BankAccount, CompanyInfo, DiscountMode, PaymentTerm, Quotation, QuotationItemData, TaxMode } from '../types';
 import { formatRupiah } from './quotationEngine';
-import { discountModeOf, letterSettingsOf, taxModeOf } from './letter';
+import { DEFAULT_SETTINGS, bankFor, discountModeOf, letterSettingsOf, taxModeOf } from './letter';
 
 export interface DocumentRow {
   kind: 'item' | 'charge';
@@ -60,6 +60,9 @@ export interface DocumentView {
   /** "Keterangan": PPN statement (when not a separate line) + the quotation's terms. */
   terms: string[];
   paymentTerms: PaymentTerm[];
+  /** Letterhead and the account to pay into (from Pengaturan / this letter). */
+  company: CompanyInfo;
+  bank: BankAccount;
   /** First PPN statement, kept for callers that print one line. */
   taxTerm: string;
   /** Amount the customer pays as shown on the letter (WhatsApp etc.). */
@@ -77,8 +80,8 @@ export function specLines(specs: string | undefined): string[] {
   return parts.map(p => p.trim()).filter(Boolean).slice(0, 12);
 }
 
-export function documentView(q: Quotation): DocumentView {
-  const settings = letterSettingsOf(q);
+export function documentView(q: Quotation, app: AppSettings = DEFAULT_SETTINGS): DocumentView {
+  const settings = letterSettingsOf(q, app.templates);
   const taxMode = taxModeOf(q);
   const discountMode = discountModeOf(q);
   const gross = taxMode === 'INCLUDED' ? 1 + q.taxRatePercent / 100 : 1;
@@ -158,6 +161,8 @@ export function documentView(q: Quotation): DocumentView {
     totals,
     terms: [...(taxMode === 'ADDED' ? [] : [taxTerm]), ...settings.terms],
     paymentTerms: settings.paymentTerms,
+    company: app.company,
+    bank: bankFor(q, app),
     taxTerm,
     headlineTotal,
   };

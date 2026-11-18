@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { AppNotification, CustomProductRequest, PriceChange, Product, Quotation, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, AppSettings, CustomProductRequest, PriceChange, Product, Quotation, QuotationItemData, UserProfile } from '../types';
+import { DEFAULT_SETTINGS } from '../utils/letter';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
 import type { AgustaProduct } from '../utils/agustaCatalog';
@@ -18,6 +19,7 @@ import {
   type FollowUpInput,
   type PriceListChange,
   type Result,
+  type SettingKey,
   type Snapshot,
   type UserPatch,
 } from '../backend';
@@ -66,6 +68,7 @@ interface Store {
   notifications: AppNotification[];
   supplierSites: SupplierSite[];
   priceHistory: PriceChange[];
+  settings: AppSettings;
   unreadCount: number;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
 
@@ -75,6 +78,8 @@ interface Store {
   searchMarket: (query: string) => Promise<MarketSearchResult>;
   searchSuppliers: (query: string) => Promise<SupplierSearchResult>;
   saveSupplierSites: (sites: Omit<SupplierSite, 'id'>[]) => Promise<void>;
+  /** Pengaturan: letterhead, bank accounts, letter templates. */
+  saveSetting: <K extends SettingKey>(key: K, value: AppSettings[K]) => Promise<void>;
   applyPriceList: (reference: string, changes: PriceListChange[]) => Promise<number>;
   setCustomRequestSupplier: (id: string, supplier: SupplierRef | null) => Promise<void>;
   /** Imports the whole agusta.co.id catalog, one page at a time. */
@@ -130,6 +135,7 @@ const EMPTY: Snapshot = {
   notifications: [],
   supplierSites: [],
   priceHistory: [],
+  settings: DEFAULT_SETTINGS,
 };
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
@@ -217,7 +223,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const deliver = async (q: Quotation, users: UserProfile[], forcePdf: boolean): Promise<WhatsAppSendResult> => {
     const me = actor();
     if (backend.mode === 'supabase' && (forcePdf || !q.pdfPath)) {
-      const pdf = await buildQuotationPdf(q, signerFor(q, users));
+      const pdf = await buildQuotationPdf(q, signerFor(q, users), snapRef.current.settings);
       await backend.attachQuotationPdf(me, q, pdf);
     }
     return backend.sendWhatsApp(me, q.id);
@@ -365,6 +371,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       hits: r.hits.map(h => ({ ...h, supplier: sites.find(s => h.domain === s.domain || h.domain.endsWith(`.${s.domain}`))?.name ?? h.supplier })),
     };
   };
+  const saveSetting: Store['saveSetting'] = async (key, value) => {
+    await backend.saveSetting(actor(), key, value);
+    await refresh();
+  };
   const saveSupplierSites: Store['saveSupplierSites'] = async sites => {
     await backend.saveSupplierSites(actor(), sites);
     await refresh();
@@ -442,6 +452,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     searchMarket,
     searchSuppliers,
     saveSupplierSites,
+    saveSetting,
     applyPriceList,
     setCustomRequestSupplier,
     syncAgustaCatalog,

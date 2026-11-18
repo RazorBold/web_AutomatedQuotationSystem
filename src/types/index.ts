@@ -54,6 +54,49 @@ export interface LetterSettings {
   discountMode: DiscountMode;
   terms: string[];
   paymentTerms: PaymentTerm[];
+  /** Account printed on the letter; null/undefined = the default account. */
+  bank?: BankAccount | null;
+}
+
+/** "Pengaturan": the letterhead. */
+export interface CompanyInfo {
+  name: string;
+  street: string;
+  city: string;
+  country: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  /** Written before the letter date ("Semarang, 18 November 2026"). */
+  place: string;
+}
+
+/** "Pengaturan": a company bank account. */
+export interface BankAccount {
+  id: string;
+  /** e.g. "BANK BCA Cabang Gang Tengah, Semarang". */
+  bank: string;
+  holder: string;
+  account: string;
+  isDefault?: boolean;
+}
+
+export interface PaymentPreset {
+  label: string;
+  terms: PaymentTerm[];
+}
+
+/** "Pengaturan": standard and one-tap Keterangan lines, and payment term choices. */
+export interface LetterTemplates {
+  defaultTerms: string[];
+  suggestions: string[];
+  paymentPresets: PaymentPreset[];
+}
+
+export interface AppSettings {
+  company: CompanyInfo;
+  banks: BankAccount[];
+  templates: LetterTemplates;
 }
 
 /** Forwarding to Management (R7), for a quotation or a custom request. */
@@ -178,6 +221,8 @@ export interface Quotation {
   paymentTerms?: PaymentTerm[];
   /** Letter date as yyyy-mm-dd (for "Semarang, 18 November 2026"). */
   issuedOn?: string;
+  /** Account printed on the letter (a copy); undefined = the default account in Pengaturan. */
+  bankAccount?: BankAccount;
   /** Additional charges: jasa pasang, ongkir, lainnya (R6). */
   charges?: QuotationCharge[];
   /** Latest forwarding to Management, if any (R7). */

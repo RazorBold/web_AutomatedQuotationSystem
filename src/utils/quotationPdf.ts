@@ -3,13 +3,11 @@
  * downloads and for the copy uploaded to storage and attached to the WhatsApp notification.
  * Layout and numbers come from documentView(), the same source as the on-screen letter.
  */
-import type { Quotation, UserProfile } from '../types';
+import type { AppSettings, Quotation, UserProfile } from '../types';
 import { formatRupiah } from './quotationEngine';
 import { pdfSafeImageUrl } from './agustaCatalog';
 import { customerAddress, documentView, type DocumentRow } from './quotationView';
-import { COMPANY, letterDate, letterNumber, letterSubject, quotationFileName } from './letter';
-
-export { COMPANY } from './letter';
+import { DEFAULT_SETTINGS, letterDate, letterNumber, letterSubject, quotationFileName } from './letter';
 
 export type Signer = Pick<UserProfile, 'name' | 'title'>;
 
@@ -64,8 +62,9 @@ function loadPdfImage(original: string | undefined): Promise<PdfImage | null> {
 const t = (s: string) => s.replace(/[–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/ /g, ' ');
 const money = (v: number | null) => (v === null ? 'Termasuk' : t(formatRupiah(v)));
 
-export async function buildQuotationPdf(q: Quotation, signer: Signer): Promise<Blob> {
-  const view = documentView(q);
+export async function buildQuotationPdf(q: Quotation, signer: Signer, settings: AppSettings = DEFAULT_SETTINGS): Promise<Blob> {
+  const view = documentView(q, settings);
+  const COMPANY = view.company;
   const [{ jsPDF }, images] = await Promise.all([import('jspdf'), Promise.all(view.rows.map(r => (r.kind === 'item' ? loadPdfImage(r.image) : Promise.resolve(null))))]);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const red: [number, number, number] = [214, 32, 42];
@@ -268,15 +267,15 @@ export async function buildQuotationPdf(q: Quotation, signer: Signer): Promise<B
   bullet(['Pembayaran dapat ditransfer ke rekening perusahaan']);
   ensure(14);
   font('bold', 9.5);
-  doc.text(COMPANY.bank.name, L + 22, y);
+  doc.text(t(view.bank.bank), L + 22, y);
   font('normal', 9.5);
   doc.text('an. ', L + 22, y + 4.4);
   font('bold', 9.5);
-  doc.text(COMPANY.bank.holder, L + 22 + doc.getTextWidth('an. '), y + 4.4);
+  doc.text(t(view.bank.holder), L + 22 + doc.getTextWidth('an. '), y + 4.4);
   font('normal', 9.5);
   doc.text('rek. ', L + 22, y + 8.8);
   font('bold', 9.5);
-  doc.text(COMPANY.bank.account, L + 22 + doc.getTextWidth('rek. '), y + 8.8);
+  doc.text(t(view.bank.account), L + 22 + doc.getTextWidth('rek. '), y + 8.8);
   y += 15;
 
   // ── Closing & signature ──
@@ -304,8 +303,8 @@ export async function buildQuotationPdf(q: Quotation, signer: Signer): Promise<B
   return doc.output('blob');
 }
 
-export async function downloadQuotationPdf(q: Quotation, signer: Signer) {
-  const blob = await buildQuotationPdf(q, signer);
+export async function downloadQuotationPdf(q: Quotation, signer: Signer, settings: AppSettings = DEFAULT_SETTINGS) {
+  const blob = await buildQuotationPdf(q, signer, settings);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

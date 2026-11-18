@@ -1,4 +1,4 @@
-import type { AppNotification, CustomProductRequest, CustomerInfo, FollowUpStatus, LetterSettings, LostReason, PriceChange, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
+import type { AppNotification, AppSettings, CustomProductRequest, CustomerInfo, FollowUpStatus, LetterSettings, LostReason, PriceChange, Product, Quotation, QuotationCharge, QuotationItemData, UserProfile } from '../types';
 import type { SupplierSearchResult, SupplierSite } from '../utils/supplierSearch';
 import type { DiscountRule } from '../utils/quotationEngine';
 import type { WhatsAppSendResult } from '../utils/whatsapp';
@@ -20,6 +20,8 @@ export interface Snapshot {
   supplierSites: SupplierSite[];
   /** R9: latest HPP changes, newest first (Sales Support & Management only). */
   priceHistory: PriceChange[];
+  /** Pengaturan: letterhead, bank accounts, letter templates (everyone reads them). */
+  settings: AppSettings;
 }
 
 export interface PriceListChange {
@@ -135,6 +137,8 @@ export interface Backend {
   /** R10: the item on supplier websites (domains) or, without any, the open web minus marketplaces. */
   searchSuppliers(query: string, domains: string[]): Promise<SupplierSearchResult>;
   saveSupplierSites(actor: UserProfile, sites: Omit<SupplierSite, 'id'>[]): Promise<void>;
+  /** Pengaturan (Sales Support / Management). */
+  saveSetting<K extends SettingKey>(actor: UserProfile, key: K, value: AppSettings[K]): Promise<void>;
   /** R9: applies a reviewed supplier price list to HPP; returns how many products changed. */
   applyPriceList(actor: UserProfile, reference: string, changes: PriceListChange[]): Promise<number>;
   /** Saves (or clears, with null) the supplier reference of a custom request. */
@@ -146,3 +150,6 @@ export interface Backend {
   /** Local demo only. */
   resetDemoData?(): Promise<void>;
 }
+
+/** Pengaturan sections, as stored. */
+export type SettingKey = keyof AppSettings;
