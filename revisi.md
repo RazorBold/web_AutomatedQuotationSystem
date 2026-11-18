@@ -244,6 +244,7 @@ Isi kolom **Jawaban** lalu ubah status revisi terkait.
 
 | Tanggal | Revisi | Catatan |
 |---|---|---|
+| 18 Nov 2026 | — | **Perbaikan dari uji coba live di production** (commit `48079fc`, Vercel *Ready*): tombol *Lanjut tinjau* bisa diklik tanpa scroll sampai bawah; *Aktivitas terakhir* di Beranda diurutkan dari yang terbaru; file `.env` tidak ikut ter-upload saat deploy. Database Supabase (Tokyo) sudah dipasang dan diuji di Preview. Production masih mode demo sampai env Supabase diisi. |
 | 18 Nov 2026 | R9, R10 | **Tahap 4 live di production** (commit `ff6c847`, Vercel *Ready*). Menunggu price list & daftar website supplier asli untuk uji akhir. |
 | 18 Nov 2026 | R9, R10 | **Tahap 4 selesai.** Menu baru *Supplier & HPP*: import price list (Excel/CSV/PDF teks) dengan pratinjau, riwayat perubahan HPP, daftar website supplier; tab *Website supplier* di riset harga. Database: migrasi `20261120000000_tahap4_supplier.sql`. Diuji: 40 unit test, database (PGlite, termasuk regresi 7 migrasi sebelumnya), dan alur di browser (CSV, Excel, PDF, pencarian supplier dengan layanan tiruan). **Masih perlu file price list & daftar website asli dari Agusta.** |
 | 17 Nov 2026 | R13, R14, R8 | **Tahap 3 live di production** (commit `911ee85`, Vercel *Ready*). Pengingat mingguan aktif setelah Supabase dipasang dan `CRON_SECRET` diisi. |
