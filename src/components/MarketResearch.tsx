@@ -149,7 +149,7 @@ export function MarketResearch({
           </p>
           {supResult?.mode === 'live' &&
             (supResult.hits.length === 0 ? (
-              <p className="mt-2 text-[13px] text-ink-2">Tidak ada hasil untuk “{supResult.query}”. Coba kata kunci lain atau cek manual.</p>
+              <p className="mt-2 text-[13px] text-ink-2">Tidak ada halaman produk untuk “{supResult.query}” di website supplier. Dokumen dan halaman profil perusahaan tidak ditampilkan. Coba kata kunci lain, tab Marketplace, atau cek manual.</p>
             ) : (
               <ul className="mt-2 divide-y divide-line">
                 {(showAll ? supResult.hits : supResult.hits.slice(0, 6)).map(h => {

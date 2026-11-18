@@ -96,8 +96,50 @@ export function mapSerperOrganic(item: any, sites: SupplierSite[]): SupplierHit 
   };
 }
 
-/** Drops marketplace hits (open-web mode) and keeps priced results first. */
-export function cleanHits(hits: SupplierHit[]): SupplierHit[] {
-  const ok = hits.filter(h => !MARKETPLACES.some(m => h.domain === m || h.domain.endsWith(`.${m}`)));
+/** Documents and company pages, not product pages: annual reports, news, careers, contact, … */
+const DOCUMENT_URL = /\.(pdf|docx?|xlsx?|pptx?|zip|rar)(?:$|[?#])|\/(downloads?|uploads?\/.*\.pdf|investor|career|karir|news|berita|blog|artikel|articles?|inspirasi|inspirations?|ide|ideas|tips|panduan|guides?|press|about|tentang|contact|kontak|privacy|terms|sitemap|login|register)(?:[/?#.-]|$)/i;
+const NON_PRODUCT_TEXT =
+  /laporan (tahunan|keuangan|keberlanjutan)|annual report|sustainability report|financial statement|investor|prospektus|rups|siaran pers|press release|lowongan|karir|career|tentang kami|about us|hubungi kami|contact us|kebijakan privasi|privacy policy|syarat (dan|&) ketentuan|terms (and|&) conditions|\bberita\b|\bnews\b|\bblog\b|hadir di|\bpameran\b|\bevent\b|\bwebinar\b|\bpenghargaan\b|\bseminar\b|^\s*\d+\s+(rekomendasi|tips|cara|ide)|\brekomendasi\b|\btips\b|^cara\b|daftar (jenis|harga)|jenis[- ]jenis/i;
+
+/** URL segments that shops and catalogs use for product pages. */
+const PRODUCT_URL = /\/(products?|produk|shop|store|toko|items?|katalog|catalog(ue)?|collections?|p|detail|jual)\//i;
+const STOP_WORDS = new Set(['dan', 'dengan', 'untuk', 'yang', 'atau', 'the', 'and', 'for', 'unit', 'pcs', 'set']);
+
+/** Search words that should appear in a product title ("kursi auditorium lipat" → kursi, auditorium, lipat). */
+export const queryWords = (query: string) =>
+  [...new Set(query.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !STOP_WORDS.has(w) && !/^\d+$/.test(w)))];
+
+/**
+ * True for a page that is shown as a product: never the home page, a document or a company/news page,
+ * and with at least one product signal — a price, a product-style URL, or every search word in the title.
+ */
+export function isProductHit(h: Pick<SupplierHit, 'url' | 'title' | 'snippet'> & { price?: number }, query = ''): boolean {
+  let path = '';
+  try {
+    path = new URL(h.url).pathname.replace(/\/+$/, '');
+  } catch {
+    return false;
+  }
+  if (!path || /^\/(id|en|id-id|en-us|index\.(html?|php))?$/i.test(path)) return false;
+  if (DOCUMENT_URL.test(h.url) || NON_PRODUCT_TEXT.test(`${h.title} ${h.snippet}`)) return false;
+  if ((h.price ?? 0) > 0 || PRODUCT_URL.test(`${path}/`)) return true;
+  const words = queryWords(query);
+  const title = h.title.toLowerCase();
+  return words.length > 0 && words.every(w => title.includes(w));
+}
+
+const onDomain = (domain: string, d: string) => domain === d || domain.endsWith(`.${d}`);
+
+/**
+ * Drops marketplace hits, non-product pages and — when a supplier list is given — anything outside it
+ * (Google does not always honour the site: filter). Priced results first.
+ */
+export function cleanHits(hits: SupplierHit[], domains: string[] = [], query = ''): SupplierHit[] {
+  const ok = hits.filter(
+    h =>
+      !MARKETPLACES.some(m => onDomain(h.domain, m)) &&
+      (!domains.length || domains.some(d => onDomain(h.domain, d))) &&
+      isProductHit(h, query)
+  );
   return [...ok.filter(h => h.price > 0), ...ok.filter(h => h.price <= 0)];
 }

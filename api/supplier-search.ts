@@ -33,28 +33,38 @@ export const GET = handle(async request => {
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.at < TTL_MS) return json(hit.value);
 
-  let res: Response;
-  try {
-    res = await fetch(`${process.env.SERPER_BASE_URL || 'https://google.serper.dev'}/search`, {
-      method: 'POST',
-      headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-      // num ≤ 10: free Serper accounts reject site: queries asking for more ("Query pattern not allowed").
-      body: JSON.stringify({ q: googleQuery, gl: 'id', hl: 'id', location: 'Indonesia', num: 10 }),
-      signal: AbortSignal.timeout(20_000),
-    });
-  } catch {
-    throw new HttpError(504, 'Layanan pencarian tidak merespons. Coba lagi beberapa saat.');
-  }
-  if (res.status === 401 || res.status === 403) throw new HttpError(502, 'API key Serper.dev ditolak. Periksa SERPER_API_KEY.');
-  if (res.status === 429) throw new HttpError(429, 'Kuota pencarian Serper.dev habis atau terlalu sering. Coba lagi nanti.');
-  if (!res.ok) {
-    const detail = ((await res.json().catch(() => ({}))) as { message?: string }).message;
-    throw new HttpError(502, `Layanan pencarian mengembalikan status ${res.status}${detail ? `: ${detail}` : ''}.`);
-  }
-
-  const body = (await res.json().catch(() => ({}))) as { organic?: unknown[] };
   const sites = domains.map(d => ({ id: d, name: d, domain: d }));
-  const hits = cleanHits((body.organic ?? []).map(o => mapSerperOrganic(o, sites)).filter((h): h is SupplierHit => h !== null)).slice(0, 15);
+  /** One Google results page (10 results, 1 credit). */
+  const searchPage = async (page: number): Promise<SupplierHit[]> => {
+    let res: Response;
+    try {
+      res = await fetch(`${process.env.SERPER_BASE_URL || 'https://google.serper.dev'}/search`, {
+        method: 'POST',
+        headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+        // num ≤ 10: free Serper accounts reject site: queries asking for more ("Query pattern not allowed").
+        body: JSON.stringify({ q: googleQuery, gl: 'id', hl: 'id', location: 'Indonesia', num: 10, page }),
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch {
+      throw new HttpError(504, 'Layanan pencarian tidak merespons. Coba lagi beberapa saat.');
+    }
+    if (res.status === 401 || res.status === 403) throw new HttpError(502, 'API key Serper.dev ditolak. Periksa SERPER_API_KEY.');
+    if (res.status === 429) throw new HttpError(429, 'Kuota pencarian Serper.dev habis atau terlalu sering. Coba lagi nanti.');
+    if (!res.ok) {
+      const detail = ((await res.json().catch(() => ({}))) as { message?: string }).message;
+      throw new HttpError(502, `Layanan pencarian mengembalikan status ${res.status}${detail ? `: ${detail}` : ''}.`);
+    }
+    const body = (await res.json().catch(() => ({}))) as { organic?: unknown[] };
+    return (body.organic ?? []).map(o => mapSerperOrganic(o, sites)).filter((h): h is SupplierHit => h !== null);
+  };
+
+  // Documents and company pages are dropped (cleanHits); when that leaves little, look one page further.
+  let raw = await searchPage(1);
+  if (cleanHits(raw, domains, q).length < 3 && raw.length >= 8) raw = [...raw, ...(await searchPage(2).catch(() => []))];
+  const seen = new Set<string>();
+  // Same page with Google's tracking parameter or a doubled slash counts once.
+  const pageKey = (url: string) => url.split(/[?#]/)[0]!.replace(/(?<!:)\/{2,}/g, '/').replace(/\/$/, '').toLowerCase();
+  const hits = cleanHits(raw.filter(h => !seen.has(pageKey(h.url)) && seen.add(pageKey(h.url))), domains, q).slice(0, 15);
   const value: SupplierSearchResult = { mode: 'live', scope, query: q, hits };
 
   if (cache.size > 200) cache.clear();

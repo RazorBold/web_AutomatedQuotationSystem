@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Product } from '../types';
 import { cellPrice, detectColumns, effectiveChanges, lineAmounts, matchPriceList, parseCsv, pdfItemsToRows } from './priceList';
-import { buildSupplierQuery, cleanHits, extractPrice, mapSerperOrganic, normalizeDomain } from './supplierSearch';
+import { buildSupplierQuery, cleanHits, extractPrice, isProductHit, mapSerperOrganic, normalizeDomain } from './supplierSearch';
 
 const product = (id: string, sku: string, name: string, cogs: number, basePrice = cogs * 2): Product => ({
   id, sku, name, cogs, basePrice, category: 'Kursi', brand: 'INDACHI', image: '', stock: 0, unit: 'Unit', specs: '', description: '',
@@ -99,9 +99,44 @@ test('supplier search: domains, query, prices, marketplace filter', () => {
   ]);
   assert.deepEqual([hit?.supplier, hit?.domain, hit?.price], ['PT Supplier', 'shop.supplier.co.id', 2_100_000]);
   const cleaned = cleanHits([
-    { title: 'a', url: '', domain: 'www.tokopedia.com', supplier: '', snippet: '', price: 1 },
-    { title: 'b', url: '', domain: 'x.com', supplier: '', snippet: '', price: 0 },
-    { title: 'c', url: '', domain: 'y.com', supplier: '', snippet: '', price: 5000 },
+    { title: 'a', url: 'https://www.tokopedia.com/p/a', domain: 'www.tokopedia.com', supplier: '', snippet: '', price: 1 },
+    { title: 'b', url: 'https://x.com/produk/b', domain: 'x.com', supplier: '', snippet: '', price: 0 },
+    { title: 'c', url: 'https://y.com/kursi-c', domain: 'y.com', supplier: '', snippet: '', price: 5000 },
   ]);
   assert.deepEqual(cleaned.map(h => h.title), ['c', 'b']);
+});
+
+test('supplier search keeps product pages only', () => {
+  const page = (url: string, title = 'Kursi lipat', snippet = '') => isProductHit({ url, title, snippet }, 'kursi lipat');
+  assert.equal(page('https://chitose-indonesia.com/product/folding-chair-yamato'), true);
+  assert.equal(page('https://chitose-indonesia.com/downloads/Laporan-Tahunan-2025.pdf', 'Laporan-Tahunan-2025.pdf'), false);
+  assert.equal(page('https://chitose-indonesia.com/files/katalog.PDF?v=2'), false);
+  assert.equal(page('https://chitose-indonesia.com/', 'Chitose International'), false);
+  assert.equal(page('https://chitose-indonesia.com/en'), false);
+  assert.equal(page('https://chitose-indonesia.com/investor/rups'), false);
+  assert.equal(page('https://chitose-indonesia.com/kursi-x', 'LAPORAN TAHUNAN ANNUAL REPORT'), false);
+  assert.equal(page('https://brother.co.id/about-us', 'Tentang Kami'), false);
+  assert.equal(page('https://brother.co.id/news/pameran-2026'), false);
+  assert.equal(page('https://brother.co.id/aboutness-chair'), true);
+  // Corporate pages without a product signal are dropped; a price or a product URL keeps a page.
+  assert.equal(page('https://www.brother.co.id/id-id/solutions/customisation', 'Customisation Solutions'), false);
+  assert.equal(page('https://www.chitose-indonesia.com/id/who-we-are/', 'Who We Are – Chitose International'), false);
+  assert.equal(page('https://x.co.id/kategori/kantor-123', 'Kursi Kerja Model A'), false);
+  assert.equal(page('https://x.co.id/produk/kursi-kerja-a', 'Kursi Kerja Model A'), true);
+  // Buying guides and inspiration articles, even with a price in the text.
+  assert.equal(isProductHit({ url: 'https://informa.co.id/inspirations/rekomendasi-kursi-kerja', title: '10 Rekomendasi Kursi Kerja Terbaik', snippet: '', price: 529000 }, 'kursi kerja'), false);
+  assert.equal(isProductHit({ url: 'https://www.ikea.co.id/in/inspirasi/jenis-kursi-kantor', title: 'Daftar Jenis Kursi Kantor dan Harganya', snippet: '' }, 'kursi kantor'), false);
+  assert.equal(page('https://www.ikea.co.id/in/produk/ruang-kerja-kantor/kursi-kantor/markus-art-50261151', 'MARKUS kursi kantor'), true);
+  assert.equal(isProductHit({ url: 'https://x.co.id/kursi-a', title: 'Kursi A', snippet: '', price: 850000 }, 'meja'), true);
+  assert.equal(page('https://www.chitose-indonesia.com/id/chitose-at-apkasi-otonomi-expo-2026/', 'Chitose Hadir di Apkasi Otonomi Expo 2026'), false);
+  // "Expo" (the brand) is not mistaken for an event page; every search word in the title is a product signal.
+  assert.equal(isProductHit({ url: 'https://expo.co.id/lemari-pakaian-lp-2101', title: 'EXPO LP-2101 Lemari Pakaian', snippet: '' }, 'lemari pakaian expo'), true);
+  const listed = cleanHits(
+    [
+      { title: 'Kursi kantor', url: 'https://www.chitose-indonesia.com/produk/kursi-kantor', domain: 'chitose-indonesia.com', supplier: '', snippet: '', price: 0 },
+      { title: 'Alamat Kantor', url: 'https://www.bawaslu.go.id/id/profil/alamat-kantor', domain: 'bawaslu.go.id', supplier: '', snippet: '', price: 0 },
+    ],
+    ['chitose-indonesia.com', 'brother.co.id']
+  );
+  assert.deepEqual(listed.map(h => h.domain), ['chitose-indonesia.com']);
 });
